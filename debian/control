@@ -1,0 +1,104 @@
+Source: libratbag
+Maintainer: Stephen Kitt <skitt@debian.org>
+Section: libs
+Priority: optional
+Build-Depends: debhelper (>= 9),
+               dh-autoreconf,
+               doxygen,
+               graphviz,
+               libevdev-dev,
+               libudev-dev,
+               pkg-config,
+               valgrind
+Standards-Version: 3.9.7
+Homepage: https://github.com/libratbag/libratbag/
+Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/libratbag.git
+Vcs-Git: https://anonscm.debian.org/git/collab-maint/libratbag.git
+
+Package: liblur2
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: Logitech Unifying Receiver access library
+ liblur is an access library for devices connected to Logitech
+ Unifying Receivers. It provides functions to enumerate or disconnect
+ paired devices, and pair new devices.
+
+Package: liblur-dev
+Architecture: linux-any
+Multi-Arch: same
+Section: libdevel
+Depends: liblur2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: Logitech Unifying Receiver access library - dev files
+ liblur is an access library for devices connected to Logitech
+ Unifying Receivers. It provides functions to enumerate or disconnect
+ paired devices, and pair new devices.
+ .
+ This package contains the files required to build software using
+ liblur.
+
+Package: libratbag2
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: configuration library for gaming mice
+ libratbag is a configuration library for gaming mice. It provides a
+ generic way to access the various features exposed by these mice and
+ abstracts away hardware-specific and kernel-specific quirks.
+ .
+ It currently supports some Etekcity and Roccat mice, and most
+ Logitech mice (both gaming and generic mice).
+
+Package: libratbag-dev
+Architecture: linux-any
+Multi-Arch: same
+Section: libdevel
+Depends: libratbag2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
+Recommends: libratbag-doc
+Pre-Depends: ${misc:Pre-Depends}
+Description: configuration library for gaming mice - development files
+ libratbag is a configuration library for gaming mice. It provides a
+ generic way to access the various features exposed by these mice and
+ abstracts away hardware-specific and kernel-specific quirks.
+ .
+ It currently supports some Etekcity and Roccat mice, and most
+ Logitech mice (both gaming and generic mice).
+ .
+ This package contains the files required to build software using
+ libratbag.
+
+Package: libratbag-doc
+Architecture: all
+Section: doc
+Depends: libjs-jquery, libjs-bootstrap, libjs-mathjax, ${misc:Depends}
+Pre-Depends: ${misc:Pre-Depends}
+Description: configuration library for gaming mice - documentation
+ libratbag is a configuration library for gaming mice. It provides a
+ generic way to access the various features exposed by these mice and
+ abstracts away hardware-specific and kernel-specific quirks.
+ .
+ It currently supports some Etekcity and Roccat mice, and most
+ Logitech mice (both gaming and generic mice).
+ .
+ This package contains the developer documentation for libratbag.
+
+Package: libratbag-tools
+Architecture: linux-any
+Section: utils
+Depends: ${misc:Depends},
+         ${shlibs:Depends}
+Description: configuration tools for gaming mice
+ This package contains lur-command and ratbag-command. lur-command
+ controls Logitech Unifying Receivers and attached devices, allowing
+ devices to be enumerated, disconnected and paired. ratbag-command
+ controls libratbag-supported gaming mice, allowing settings such as
+ DPI, report rate, and button actions to be queried and configured.

@@ -1,0 +1,5 @@
+libratbag (0.3-1) unstable; urgency=low
+
+  * Initial release. Closes: #801896.
+
+ -- Stephen Kitt <skitt@debian.org>  Sat, 05 Mar 2016 11:48:03 +0100

@@ -1,0 +1,3 @@
+usr/lib/*/libratbag.so.*
+usr/lib/udev
+usr/share/libratbag

@@ -1,0 +1,9 @@
+Document: libratbag-doc
+Title: libratbag Manual
+Author: Red Hat, Inc.
+Abstract: This manual describes the libratbag API.
+Section: Programming
+
+Format: HTML
+Index: /usr/share/doc/libratbag-doc/html/index.html
+Files: /usr/share/doc/libratbag-doc/html/*.html

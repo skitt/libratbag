@@ -1,0 +1,3 @@
+usr/include/libratbag.h
+usr/lib/*/libratbag.so
+usr/lib/*/pkgconfig/libratbag.pc

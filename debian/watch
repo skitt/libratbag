@@ -1,0 +1,2 @@
+version=3
+https://github.com/libratbag/libratbag/releases (?:.*/)?v?(\d[\d\.]*)\.(?:tar\.gz|tar\.bz2|tar\.xz)
