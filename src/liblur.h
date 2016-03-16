@@ -85,8 +85,8 @@ int
 lur_device_disconnect(struct lur_device *dev);
 
 /**
- * Returns non-zero if a device with the given vid/pid is a logitech
- * unifying receiver device.
+ * Returns non-zero if a device with the given vid/pid is a Logitech
+ * Unifying Receiver device.
  *
  * @param vid The vendor ID
  * @param pid The product ID
@@ -107,11 +107,16 @@ lur_is_receiver(uint16_t vid, uint16_t pid);
  *
  * @param fd An O_RDWR file descriptor pointing to a /dev/hidraw node
  * @param userdata Caller-specific data
+ * @param lur Set to the lur object on success, otherwise unmodified
  *
- * @return A lur object, or NULL on error.
+ * @return 0 on success or a negative errno on error
+ * @retval -EINVAL The fd does not point to a lur receiver
+ *
+ * @note liblur does not have OOM handling. If an allocation fails, liblur
+ * will simply abort()
  */
-struct lur_receiver*
-lur_receiver_new_from_hidraw(int fd, void *userdata);
+int
+lur_receiver_new_from_hidraw(int fd, void *userdata, struct lur_receiver **lur);
 
 /**
  * Enumerate devices currently paired with the given receiver.
@@ -238,6 +243,27 @@ lur_device_ref(struct lur_device *dev);
  */
 struct lur_device *
 lur_device_unref(struct lur_device *dev);
+
+/**
+ * Set caller-specific data associated with this object. liblur does
+ * not manage, look at, or modify this data. The caller must ensure the
+ * data is valid.
+ *
+ * @param dev A valid device object
+ * @param userdata Caller-specific data
+ */
+void
+lur_device_set_user_data(struct lur_device *dev, void *userdata);
+
+/**
+ * Get the caller-specific data associated with this object, if any.
+ *
+ * @param dev A valid device object
+ * @return The caller-specific data previously assigned in
+ * lur_device_set_user_data().
+ */
+void*
+lur_device_get_user_data(const struct lur_device *dev);
 
 #ifdef __cplusplus
 }

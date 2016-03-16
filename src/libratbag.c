@@ -37,6 +37,23 @@
 #include "libratbag-private.h"
 #include "libratbag-util.h"
 
+static enum ratbag_error_code
+error_code(enum ratbag_error_code code)
+{
+	switch(code) {
+	case RATBAG_SUCCESS:
+	case RATBAG_ERROR_DEVICE:
+	case RATBAG_ERROR_CAPABILITY:
+	case RATBAG_ERROR_VALUE:
+	case RATBAG_ERROR_SYSTEM:
+	case RATBAG_ERROR_IMPLEMENTATION:
+		break;
+	default:
+		assert(!"Invalid error code. This is a library bug.");
+	}
+	return code;
+}
+
 static void
 ratbag_profile_destroy(struct ratbag_profile *profile);
 static void
@@ -156,21 +173,20 @@ ratbag_device_new(struct ratbag *ratbag, struct udev_device *udev_device,
 
 	device = zalloc(sizeof(*device));
 	device->name = strdup_safe(name);
-
-	if (!name) {
-		free(device);
-		return NULL;
-	}
-
 	device->ratbag = ratbag_ref(ratbag);
 	device->refcount = 1;
-	if (udev_device)
-		device->udev_device = udev_device_ref(udev_device);
-
+	device->udev_device = udev_device_ref(udev_device);
 	device->ids = *id;
 	list_init(&device->profiles);
 
 	list_insert(&ratbag->devices, &device->link);
+
+	/* We assume that most devices have this capability, so let's set it
+	 * by default. The few devices that miss this capability should
+	 * unset it instead.
+	 */
+	ratbag_device_set_capability(device,
+				     RATBAG_DEVICE_CAP_QUERY_CONFIGURATION);
 
 	return device;
 }
@@ -207,7 +223,6 @@ ratbag_sanity_check_device(struct ratbag_device *device)
 {
 	struct ratbag *ratbag = device->ratbag;
 	_cleanup_profile_ struct ratbag_profile *profile = NULL;
-	_cleanup_resolution_ struct ratbag_resolution *res = NULL;
 	bool has_active = false;
 	unsigned int nres, nprofiles;
 	bool rc = false;
@@ -218,7 +233,7 @@ ratbag_sanity_check_device(struct ratbag_device *device)
 	 * accidental negative */
 	if (device->num_profiles == 0 || device->num_profiles > 16) {
 		log_bug_libratbag(ratbag,
-				  "%s: invalid number of profiles %d\n",
+				  "%s: invalid number of profiles (%d)\n",
 				  device->name,
 				  device->num_profiles);
 		goto out;
@@ -244,8 +259,9 @@ ratbag_sanity_check_device(struct ratbag_device *device)
 		nres = ratbag_profile_get_num_resolutions(profile);
 		if (nres == 0 || nres > 16) {
 				log_bug_libratbag(ratbag,
-						  "%s: minimum 1 resolution required\n",
-						  device->name);
+						  "%s: invalid number of resolutions (%d)\n",
+						  device->name,
+						  nres);
 				goto out;
 		}
 
@@ -256,7 +272,7 @@ ratbag_sanity_check_device(struct ratbag_device *device)
 	/* Require 1 active profile */
 	if (!has_active) {
 		log_bug_libratbag(ratbag,
-				  "%s: no active profile found\n",
+				  "%s: no profile set as active profile\n",
 				  device->name);
 		goto out;
 	}
@@ -267,10 +283,10 @@ out:
 	return rc;
 }
 
-struct ratbag_driver *
-ratbag_find_driver(struct ratbag_device *device,
-		   const struct input_id *dev_id,
-		   struct ratbag_test_device *test_device)
+bool
+ratbag_assign_driver(struct ratbag_device *device,
+		     const struct input_id *dev_id,
+		     struct ratbag_test_device *test_device)
 {
 	struct ratbag *ratbag = device->ratbag;
 	struct ratbag_driver *driver;
@@ -280,7 +296,7 @@ ratbag_find_driver(struct ratbag_device *device,
 	if (!test_device) {
 		driver_name = udev_prop_value(device->udev_device, "RATBAG_DRIVER");
 		if (!driver_name)
-			return NULL;
+			return false;
 	} else {
 		driver_name = "test_driver";
 	}
@@ -293,9 +309,9 @@ ratbag_find_driver(struct ratbag_device *device,
 	}
 
 	if (!device->driver) {
-		log_error(ratbag, "%s: driver specified in hwdb not found: %s\n",
+		log_error(ratbag, "%s: driver '%s' does not exist\n",
 			  device->name, driver_name);
-		return NULL;
+		return false;
 	}
 
 	if (test_device)
@@ -304,21 +320,19 @@ ratbag_find_driver(struct ratbag_device *device,
 		rc = device->driver->probe(device);
 	if (rc == 0) {
 		if (!ratbag_sanity_check_device(device)) {
-			return NULL;
+			return false;
 		} else {
 			log_debug(ratbag, "driver match found: %s\n", driver->name);
-			return device->driver;
+			return true;
 		}
 	}
 
 	device->driver = NULL;
 
-	if (rc != -ENODEV) {
+	if (rc == -ENODEV)
 		log_error(ratbag, "%s: no hidraw device found\n", device->name);
-		return NULL;
-	}
 
-	return NULL;
+	return false;
 }
 
 static inline char*
@@ -330,7 +344,7 @@ get_device_name(struct udev_device *device)
 	if (!prop)
 		return NULL;
 
-	/* udev name is inclosed by " */
+	/* udev name is enclosed by " */
 	return strndup(&prop[1], strlen(prop) - 2);
 }
 
@@ -354,52 +368,44 @@ get_product_id(struct udev_device *device, struct input_id *id)
 	return 0;
 }
 
-LIBRATBAG_EXPORT struct ratbag_device*
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_device_new_from_udev_device(struct ratbag *ratbag,
-				   struct udev_device *udev_device)
+				   struct udev_device *udev_device,
+				   struct ratbag_device **device_out)
 {
 	struct ratbag_device *device = NULL;
-	struct ratbag_driver *driver;
-	char *name = NULL;
+	enum ratbag_error_code error = RATBAG_ERROR_DEVICE;
+	_cleanup_free_ char *name = NULL;
 	struct input_id id;
 
-	if (!ratbag) {
-		fprintf(stderr, "ratbag is NULL\n");
-		return NULL;
-	}
-
-	if (!udev_device) {
-		log_bug_client(ratbag, "udev device is NULL.\n");
-		return NULL;
-	}
+	assert(ratbag != NULL);
+	assert(udev_device != NULL);
+	assert(device_out != NULL);
 
 	if (get_product_id(udev_device, &id) != 0)
 		goto out_err;
 
 	name = get_device_name(udev_device);
-	if (!name) {
-		errno = ENOMEM;
+	if (!name)
 		goto out_err;
-	}
 
 	device = ratbag_device_new(ratbag, udev_device, name, &id);
-	free(name);
-
 	if (!device)
 		goto out_err;
 
-	driver = ratbag_find_driver(device, &device->ids, NULL);
-	if (!driver) {
-		errno = ENOTSUP;
+	if (!ratbag_assign_driver(device, &device->ids, NULL))
 		goto out_err;
-	}
 
-	return device;
+	error = RATBAG_SUCCESS;
 
 out_err:
-	ratbag_device_destroy(device);
 
-	return NULL;
+	if (error != RATBAG_SUCCESS)
+		ratbag_device_destroy(device);
+	else
+		*device_out = device;
+
+	return error_code(error);
 }
 
 LIBRATBAG_EXPORT struct ratbag_device *
@@ -461,14 +467,13 @@ ratbag_register_driver(struct ratbag *ratbag, struct ratbag_driver *driver)
 
 LIBRATBAG_EXPORT struct ratbag *
 ratbag_create_context(const struct ratbag_interface *interface,
-			 void *userdata)
+		      void *userdata)
 {
 	struct ratbag *ratbag;
 
-	if (interface == NULL ||
-	    interface->open_restricted == NULL ||
-	    interface->close_restricted == NULL)
-		return NULL;
+	assert(interface != NULL);
+	assert(interface->open_restricted != NULL);
+	assert(interface->close_restricted != NULL);
 
 	ratbag = zalloc(sizeof(*ratbag));
 	ratbag->refcount = 1;
@@ -654,8 +659,10 @@ ratbag_device_get_profile(struct ratbag_device *device, unsigned int index)
 {
 	struct ratbag_profile *profile;
 
-	if (index >= ratbag_device_get_num_profiles(device))
+	if (index >= ratbag_device_get_num_profiles(device)) {
+		log_bug_client(device->ratbag, "Requested invalid profile %d\n", index);
 		return NULL;
+	}
 
 	list_for_each(profile, &device->profiles, link) {
 		if (profile->index == index)
@@ -702,34 +709,34 @@ ratbag_device_has_capability(const struct ratbag_device *device,
 	return !!(device->capabilities & (1UL << cap));
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_profile_set_active(struct ratbag_profile *profile)
 {
 	struct ratbag_device *device = profile->device;
 	struct ratbag_profile *p;
 	int rc;
 
+	if (!ratbag_device_has_capability(device, RATBAG_DEVICE_CAP_SWITCHABLE_PROFILE))
+		return RATBAG_ERROR_CAPABILITY;
+
 	assert(device->driver->write_profile);
 	rc = device->driver->write_profile(profile);
 	if (rc)
-		return rc;
+		return RATBAG_ERROR_DEVICE;
 
-	if (ratbag_device_has_capability(device, RATBAG_DEVICE_CAP_SWITCHABLE_PROFILE)) {
-		assert(device->driver->set_active_profile);
-		rc = device->driver->set_active_profile(device, profile->index);
-	}
-
+	assert(device->driver->set_active_profile);
+	rc = device->driver->set_active_profile(device, profile->index);
 	if (rc)
-		return rc;
+		return RATBAG_ERROR_DEVICE;
 
-	list_for_each(p, &device->profiles, link) {
+	list_for_each(p, &device->profiles, link)
 		p->is_active = false;
-	}
+
 	profile->is_active = true;
-	return rc;
+	return RATBAG_SUCCESS;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT unsigned int
 ratbag_profile_get_num_resolutions(struct ratbag_profile *profile)
 {
 	return profile->resolution.num_modes;
@@ -739,10 +746,13 @@ LIBRATBAG_EXPORT struct ratbag_resolution *
 ratbag_profile_get_resolution(struct ratbag_profile *profile, unsigned int idx)
 {
 	struct ratbag_resolution *res;
-	int max = ratbag_profile_get_num_resolutions(profile);
+	unsigned max = ratbag_profile_get_num_resolutions(profile);
 
-	if (max < 0 || idx >= (unsigned int)max)
+	if (idx >= max) {
+		log_bug_client(profile->device->ratbag,
+			       "Requested invalid resolution %d\n", idx);
 		return NULL;
+	}
 
 	res = &profile->resolution.modes[idx];
 
@@ -788,42 +798,48 @@ ratbag_resolution_has_capability(struct ratbag_resolution *resolution,
 	return !!(resolution->capabilities & (1 << cap));
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_resolution_set_dpi(struct ratbag_resolution *resolution,
 			  unsigned int dpi)
 {
 	struct ratbag_profile *profile = resolution->profile;
+	int rc;
+
 	resolution->dpi_x = dpi;
 	resolution->dpi_y = dpi;
 
 	assert(profile->device->driver->write_resolution_dpi);
-	return profile->device->driver->write_resolution_dpi(resolution, dpi, dpi);
+	rc = profile->device->driver->write_resolution_dpi(resolution, dpi, dpi);
+
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_resolution_set_dpi_xy(struct ratbag_resolution *resolution,
 			     unsigned int x, unsigned int y)
 {
 	struct ratbag_profile *profile = resolution->profile;
+	int rc;
 
 	if (!ratbag_resolution_has_capability(resolution,
 					      RATBAG_RESOLUTION_CAP_SEPARATE_XY_RESOLUTION))
-		return -1;
+		return RATBAG_ERROR_CAPABILITY;
 
 	if ((x == 0 && y != 0) || (x != 0 && y == 0))
-		return -1;
+		return RATBAG_ERROR_VALUE;
 
 	assert(profile->device->driver->write_resolution_dpi);
-	return profile->device->driver->write_resolution_dpi(resolution, x, y);
+	rc = profile->device->driver->write_resolution_dpi(resolution, x, y);
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_resolution_set_report_rate(struct ratbag_resolution *resolution,
 				  unsigned int hz)
 {
 	resolution->hz = hz;
 	/* FIXME: call into the driver */
-	return 0;
+	return RATBAG_ERROR_IMPLEMENTATION;
 }
 
 LIBRATBAG_EXPORT int
@@ -856,12 +872,12 @@ ratbag_resolution_is_active(const struct ratbag_resolution *resolution)
 	return resolution->is_active;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_resolution_set_active(struct ratbag_resolution *resolution)
 {
 	resolution->is_active = true;
 	/* FIXME: call into the driver */
-	return 0;
+	return RATBAG_ERROR_IMPLEMENTATION;
 }
 
 
@@ -871,12 +887,12 @@ ratbag_resolution_is_default(const struct ratbag_resolution *resolution)
 	return resolution->is_default;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_resolution_set_default(struct ratbag_resolution *resolution)
 {
 	resolution->is_default = true;
 	/* FIXME: call into the driver */
-	return 0;
+	return RATBAG_ERROR_IMPLEMENTATION;
 }
 
 LIBRATBAG_EXPORT struct ratbag_button*
@@ -886,8 +902,10 @@ ratbag_profile_get_button(struct ratbag_profile *profile,
 	struct ratbag_device *device = profile->device;
 	struct ratbag_button *button;
 
-	if (index >= ratbag_device_get_num_buttons(device))
+	if (index >= ratbag_device_get_num_buttons(device)) {
+		log_bug_client(device->ratbag, "Requested invalid button %d\n", index);
 		return NULL;
+	}
 
 	list_for_each(button, &profile->buttons, link) {
 		if (button->index == index)
@@ -938,14 +956,14 @@ ratbag_button_get_button(struct ratbag_button *button)
 	return button->action.action.button;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_button_set_button(struct ratbag_button *button, unsigned int btn)
 {
-	struct ratbag_button_action action;
+	struct ratbag_button_action action = {0};
 	int rc;
 
 	if (!button->profile->device->driver->write_button)
-		return -ENOTSUP;
+		return RATBAG_ERROR_CAPABILITY;
 
 	action.type = RATBAG_BUTTON_ACTION_TYPE_BUTTON;
 	action.action.button = btn;
@@ -955,7 +973,7 @@ ratbag_button_set_button(struct ratbag_button *button, unsigned int btn)
 	if (rc == 0)
 		button->action = action;
 
-	return rc;
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
 LIBRATBAG_EXPORT enum ratbag_button_action_special
@@ -967,17 +985,17 @@ ratbag_button_get_special(struct ratbag_button *button)
 	return button->action.action.special;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_button_set_special(struct ratbag_button *button,
 			  enum ratbag_button_action_special act)
 {
-	struct ratbag_button_action action;
+	struct ratbag_button_action action = {0};
 	int rc;
 
 	/* FIXME: range checks */
 
 	if (!button->profile->device->driver->write_button)
-		return -1;
+		return RATBAG_ERROR_CAPABILITY;
 
 	action.type = RATBAG_BUTTON_ACTION_TYPE_SPECIAL;
 	action.action.special = act;
@@ -987,7 +1005,7 @@ ratbag_button_set_special(struct ratbag_button *button,
 	if (rc == 0)
 		button->action = action;
 
-	return rc;
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
 LIBRATBAG_EXPORT unsigned int
@@ -1003,19 +1021,19 @@ ratbag_button_get_key(struct ratbag_button *button,
 	return button->action.action.key.key;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_button_set_key(struct ratbag_button *button,
 		      unsigned int key,
 		      unsigned int *modifiers,
 		      size_t sz)
 {
-	struct ratbag_button_action action;
+	struct ratbag_button_action action = {0};
 	int rc;
 
 	/* FIXME: range checks */
 
 	if (!button->profile->device->driver->write_button)
-		return -1;
+		return RATBAG_ERROR_CAPABILITY;
 
 	/* FIXME: modifiers */
 
@@ -1026,17 +1044,17 @@ ratbag_button_set_key(struct ratbag_button *button,
 	if (rc == 0)
 		button->action = action;
 
-	return rc;
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
-LIBRATBAG_EXPORT int
+LIBRATBAG_EXPORT enum ratbag_error_code
 ratbag_button_disable(struct ratbag_button *button)
 {
 	struct ratbag_button_action action;
 	int rc;
 
 	if (!button->profile->device->driver->write_button)
-		return -1;
+		return RATBAG_ERROR_CAPABILITY;
 
 	action.type = RATBAG_BUTTON_ACTION_TYPE_NONE;
 	rc = button->profile->device->driver->write_button(button, &action);
@@ -1044,7 +1062,7 @@ ratbag_button_disable(struct ratbag_button *button)
 	if (rc == 0)
 		button->action = action;
 
-	return rc;
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
 }
 
 LIBRATBAG_EXPORT struct ratbag_button *
@@ -1143,8 +1161,25 @@ ratbag_resolution_get_user_data(const struct ratbag_resolution *ratbag_resolutio
 	return ratbag_resolution->userdata;
 }
 
-LIBRATBAG_EXPORT int
-ratbag_button_set_macro(struct ratbag_button *button, const char *name)
+LIBRATBAG_EXPORT struct ratbag_button_macro *
+ratbag_button_get_macro(struct ratbag_button *button)
+{
+	struct ratbag_button_macro *macro;
+
+	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO)
+		return NULL;
+
+	macro = ratbag_button_macro_new(button->action.macro->name);
+	memcpy(macro->macro.events,
+	       button->action.macro->events,
+	       sizeof(macro->macro.events));
+
+	return macro;
+}
+
+void
+ratbag_button_copy_macro(struct ratbag_button *button,
+			 const struct ratbag_button_macro *macro)
 {
 	if (!button->action.macro)
 		button->action.macro = zalloc(sizeof(struct ratbag_macro));
@@ -1155,24 +1190,36 @@ ratbag_button_set_macro(struct ratbag_button *button, const char *name)
 	}
 
 	button->action.type = RATBAG_BUTTON_ACTION_TYPE_MACRO;
-	button->action.macro->name = strdup_safe(name);
-
-	return 0;
+	memcpy(button->action.macro->events,
+	       macro->macro.events,
+	       sizeof(macro->macro.events));
+	button->action.macro->name = strdup_safe(macro->macro.name);
+	button->action.macro->group = strdup_safe(macro->macro.group);
 }
 
-LIBRATBAG_EXPORT int
-ratbag_button_set_macro_event(struct ratbag_button *button,
+LIBRATBAG_EXPORT enum ratbag_error_code
+ratbag_button_set_macro(struct ratbag_button *button,
+			const struct ratbag_button_macro *macro)
+{
+	int rc;
+
+	ratbag_button_copy_macro(button, macro);
+
+	rc = button->profile->device->driver->write_button(button, &button->action);
+
+	return rc == 0 ? RATBAG_SUCCESS : RATBAG_ERROR_DEVICE;
+}
+
+LIBRATBAG_EXPORT enum ratbag_error_code
+ratbag_button_macro_set_event(struct ratbag_button_macro *m,
 			      unsigned int index,
 			      enum ratbag_macro_event_type type,
 			      unsigned int data)
 {
-	struct ratbag_macro *macro;
+	struct ratbag_macro *macro = &m->macro;
 
-	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO ||
-	    index >= MAX_MACRO_EVENTS)
-		return -EINVAL;
-
-	macro = button->action.macro;
+	if (index >= MAX_MACRO_EVENTS)
+		return RATBAG_ERROR_VALUE;
 
 	switch (type) {
 	case RATBAG_MACRO_EVENT_KEY_PRESSED:
@@ -1188,39 +1235,28 @@ ratbag_button_set_macro_event(struct ratbag_button *button,
 		macro->events[index].type = type;
 		break;
 	default:
-		return -EINVAL;
+		return RATBAG_ERROR_VALUE;
 	}
 
 	return 0;
 }
 
-LIBRATBAG_EXPORT int
-ratbag_button_write_macro(struct ratbag_button *button)
-{
-	return button->profile->device->driver->write_button(button, &button->action);
-
-}
-
 LIBRATBAG_EXPORT enum ratbag_macro_event_type
-ratbag_button_get_macro_event_type(struct ratbag_button *button, unsigned int index)
+ratbag_button_macro_get_event_type(struct ratbag_button_macro *macro, unsigned int index)
 {
-	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO ||
-	    index >= MAX_MACRO_EVENTS)
+	if (index >= MAX_MACRO_EVENTS)
 		return RATBAG_MACRO_EVENT_INVALID;
 
-	return button->action.macro->events[index].type;
+	return macro->macro.events[index].type;
 }
 
 LIBRATBAG_EXPORT int
-ratbag_button_get_macro_event_key(struct ratbag_button *button, unsigned int index)
+ratbag_button_macro_get_event_key(struct ratbag_button_macro *m, unsigned int index)
 {
-	struct ratbag_macro *macro;
+	struct ratbag_macro *macro = &m->macro;
 
-	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO ||
-	    index >= MAX_MACRO_EVENTS)
-		return -EINVAL;
-
-	macro = button->action.macro;
+	if (index >= MAX_MACRO_EVENTS)
+		return 0;
 
 	if (macro->events[index].type != RATBAG_MACRO_EVENT_KEY_PRESSED &&
 	    macro->events[index].type != RATBAG_MACRO_EVENT_KEY_RELEASED)
@@ -1230,27 +1266,72 @@ ratbag_button_get_macro_event_key(struct ratbag_button *button, unsigned int ind
 }
 
 LIBRATBAG_EXPORT int
-ratbag_button_get_macro_event_timeout(struct ratbag_button *button, unsigned int index)
+ratbag_button_macro_get_event_timeout(struct ratbag_button_macro *m,
+				      unsigned int index)
 {
-	struct ratbag_macro *macro;
+	struct ratbag_macro *macro = &m->macro;
 
-	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO ||
-	    index >= MAX_MACRO_EVENTS)
-		return -EINVAL;
-
-	macro = button->action.macro;
+	if (index >= MAX_MACRO_EVENTS)
+		return 0;
 
 	if (macro->events[index].type != RATBAG_MACRO_EVENT_WAIT)
-		return -EINVAL;
+		return 0;
 
 	return macro->events[index].event.timeout;
 }
 
-LIBRATBAG_EXPORT const char *
-ratbag_button_get_macro_name(struct ratbag_button *button)
+LIBRATBAG_EXPORT unsigned int
+ratbag_button_macro_get_num_events(struct ratbag_button_macro *macro)
 {
-	if (button->action.type != RATBAG_BUTTON_ACTION_TYPE_MACRO)
+	return MAX_MACRO_EVENTS;
+}
+
+LIBRATBAG_EXPORT const char *
+ratbag_button_macro_get_name(struct ratbag_button_macro *macro)
+{
+	return macro->macro.name;
+}
+
+static void
+ratbag_button_macro_destroy(struct ratbag_button_macro *macro)
+{
+	assert(macro->refcount == 0);
+	free(macro->macro.name);
+	free(macro->macro.group);
+	free(macro);
+}
+
+LIBRATBAG_EXPORT struct ratbag_button_macro *
+ratbag_button_macro_ref(struct ratbag_button_macro *macro)
+{
+	assert(macro->refcount < INT_MAX);
+
+	macro->refcount++;
+	return macro;
+}
+
+LIBRATBAG_EXPORT struct ratbag_button_macro *
+ratbag_button_macro_unref(struct ratbag_button_macro *macro)
+{
+	if (macro == NULL)
 		return NULL;
 
-	return  button->action.macro->name;
+	assert(macro->refcount > 0);
+	macro->refcount--;
+	if (macro->refcount == 0)
+		ratbag_button_macro_destroy(macro);
+
+	return NULL;
+}
+
+LIBRATBAG_EXPORT struct ratbag_button_macro *
+ratbag_button_macro_new(const char *name)
+{
+	struct ratbag_button_macro *macro;
+
+	macro = zalloc(sizeof *macro);
+	macro->refcount = 1;
+	macro->macro.name = strdup_safe(name);
+
+	return macro;
 }

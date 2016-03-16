@@ -926,9 +926,10 @@ int hidpp20_adjustable_dpi_set_sensor_dpi(struct hidpp20_device *device,
 #define HIDPP20_ONBOARD_MODE				0x01
 #define HIDPP20_HOST_MODE				0x02
 
-#define HIDPP20_ONBOARD_PROFILES_MEMORY_TYPE_PROTOSS	0x01
-#define HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_PROTOSS	0x01
-#define HIDPP20_ONBOARD_PROFILES_MACRO_TYPE_PROTOSS	0x01
+#define HIDPP20_ONBOARD_PROFILES_MEMORY_TYPE_G402	0x01
+#define HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_G402	0x01
+#define HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_G303	0x02
+#define HIDPP20_ONBOARD_PROFILES_MACRO_TYPE_G402	0x01
 
 struct hidpp20_onboard_profiles_info {
 	uint8_t memory_model_id;
@@ -1233,21 +1234,22 @@ hidpp20_onboard_profiles_initialize(struct hidpp20_device *device,
 
 	info = (struct hidpp20_onboard_profiles_info *)msg.msg.parameters;
 
-	if (info->memory_model_id != HIDPP20_ONBOARD_PROFILES_MEMORY_TYPE_PROTOSS) {
+	if (info->memory_model_id != HIDPP20_ONBOARD_PROFILES_MEMORY_TYPE_G402) {
 		hidpp_log_error(&device->base,
 				"Memory layout not supported: 0x%02x.\n",
 				info->memory_model_id);
 		return -ENOTSUP;
 	}
 
-	if (info->profile_format_id != HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_PROTOSS) {
+	if ((info->profile_format_id != HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_G402) &&
+	    (info->profile_format_id != HIDPP20_ONBOARD_PROFILES_PROFILE_TYPE_G303)) {
 		hidpp_log_error(&device->base,
 				"Profile layout not supported: 0x%02x.\n",
 				info->profile_format_id);
 		return -ENOTSUP;
 	}
 
-	if (info->macro_format_id != HIDPP20_ONBOARD_PROFILES_MACRO_TYPE_PROTOSS) {
+	if (info->macro_format_id != HIDPP20_ONBOARD_PROFILES_MACRO_TYPE_G402) {
 		hidpp_log_error(&device->base,
 				"Macro format not supported: 0x%02x.\n",
 				info->macro_format_id);
@@ -1616,16 +1618,24 @@ union hidpp20_internal_profile {
 		uint8_t report_rate;
 		uint8_t default_dpi;
 		uint8_t switched_dpi;
-		uint16_t dpi[7];
-		uint8_t zero;
-		uint8_t padding[14];
+		uint16_t dpi[5];
+		struct {
+			uint8_t red;
+			uint8_t green;
+			uint8_t blue;
+		} profile_color;
+		uint8_t power_mode;
+		uint8_t angle_snapping;
+		uint8_t reserved[14];
 		union hidpp20_button_binding buttons[16];
 		union hidpp20_button_binding alternate_buttons[16];
 		union {
 			char txt[16 * 3];
 			uint8_t raw[16 * 3];
 		} name;
-		uint8_t padding1[46];
+		uint8_t logo_effect[11]; /* G303 only */
+		uint8_t side_effects[11]; /* G303 only */
+		uint8_t free[24];
 		uint16_t crc;
 	} __attribute__((packed)) profile;
 };

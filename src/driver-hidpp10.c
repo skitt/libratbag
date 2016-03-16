@@ -76,6 +76,7 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		      union hidpp10_button *binding)
 {
 	struct ratbag_device *device = button->profile->device;
+	struct ratbag_button_macro *m;
 	const char *name;
 	union hidpp10_macro_data *macro;
 	unsigned int i, keycode;
@@ -84,13 +85,13 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 	macro = profile->macros[binding->macro.address];
 
 	name = binding->macro.address > 1 ? (const char *)profile->macro_names[binding->macro.address - 2] : "";
-	ratbag_button_set_macro(button, name);
 	i = 0;
+	m = ratbag_button_macro_new(name);
 
 	while (macro && macro->any.type != HIDPP10_MACRO_END && i < MAX_MACRO_EVENTS) {
 		switch (macro->any.type) {
 		case HIDPP10_MACRO_DELAY:
-			ratbag_button_set_macro_event(button,
+			ratbag_button_macro_set_event(m,
 						      i++,
 						      RATBAG_MACRO_EVENT_WAIT,
 						      macro->delay.time);
@@ -99,11 +100,11 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		case HIDPP10_MACRO_KEY_PRESS:
 			keycode = ratbag_hidraw_get_keycode_from_keyboard_usage(device, macro->key.key);
 			if (!delay)
-				ratbag_button_set_macro_event(button,
+				ratbag_button_macro_set_event(m,
 							      i++,
 							      RATBAG_MACRO_EVENT_WAIT,
 							      1);
-			ratbag_button_set_macro_event(button,
+			ratbag_button_macro_set_event(m,
 						      i++,
 						      RATBAG_MACRO_EVENT_KEY_PRESSED,
 						      keycode);
@@ -112,11 +113,11 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		case HIDPP10_MACRO_KEY_RELEASE:
 			keycode = ratbag_hidraw_get_keycode_from_keyboard_usage(device, macro->key.key);
 			if (!delay)
-				ratbag_button_set_macro_event(button,
+				ratbag_button_macro_set_event(m,
 							      i++,
 							      RATBAG_MACRO_EVENT_WAIT,
 							      1);
-			ratbag_button_set_macro_event(button,
+			ratbag_button_macro_set_event(m,
 						      i++,
 						      RATBAG_MACRO_EVENT_KEY_RELEASED,
 						      keycode);
@@ -125,11 +126,11 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		case HIDPP10_MACRO_MOD_PRESS:
 			keycode = hidpp10drv_read_macro_modifier(device, macro);
 			if (!delay)
-				ratbag_button_set_macro_event(button,
+				ratbag_button_macro_set_event(m,
 							      i++,
 							      RATBAG_MACRO_EVENT_WAIT,
 							      1);
-			ratbag_button_set_macro_event(button,
+			ratbag_button_macro_set_event(m,
 						      i++,
 						      RATBAG_MACRO_EVENT_KEY_PRESSED,
 						      keycode);
@@ -138,11 +139,11 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		case HIDPP10_MACRO_MOD_RELEASE:
 			keycode = hidpp10drv_read_macro_modifier(device, macro);
 			if (!delay)
-				ratbag_button_set_macro_event(button,
+				ratbag_button_macro_set_event(m,
 							      i++,
 							      RATBAG_MACRO_EVENT_WAIT,
 							      1);
-			ratbag_button_set_macro_event(button,
+			ratbag_button_macro_set_event(m,
 						      i++,
 						      RATBAG_MACRO_EVENT_KEY_RELEASED,
 						      keycode);
@@ -151,6 +152,9 @@ hidpp10drv_read_macro(struct ratbag_button *button,
 		}
 		macro++;
 	}
+
+	ratbag_button_copy_macro(button, m);
+	ratbag_button_macro_unref(m);
 }
 
 static void
@@ -243,6 +247,27 @@ hidpp10drv_read_button(struct ratbag_button *button)
 		case 10: type = RATBAG_BUTTON_TYPE_PROFILE_CYCLE_UP; break;
 		case 11: type = RATBAG_BUTTON_TYPE_WHEEL_LEFT; break;
 		case 12: type = RATBAG_BUTTON_TYPE_WHEEL_RIGHT; break;
+		default:
+			break;
+		}
+		hidpp10drv_map_button(device, hidpp10, button);
+		break;
+	case HIDPP10_PROFILE_G9:
+		switch (button->index) {
+		case 0: type = RATBAG_BUTTON_TYPE_LEFT; break;
+		case 1: type = RATBAG_BUTTON_TYPE_RIGHT; break;
+		case 2: type = RATBAG_BUTTON_TYPE_MIDDLE; break;
+		case 3: type = RATBAG_BUTTON_TYPE_THUMB; break;
+		case 4: type = RATBAG_BUTTON_TYPE_THUMB2; break;
+		case 5: type = RATBAG_BUTTON_TYPE_UNKNOWN; break;
+		case 6: type = RATBAG_BUTTON_TYPE_WHEEL_LEFT; break;
+		case 7: type = RATBAG_BUTTON_TYPE_WHEEL_RIGHT; break;
+		case 8: type = RATBAG_BUTTON_TYPE_RESOLUTION_UP; break;
+		case 9: type = RATBAG_BUTTON_TYPE_RESOLUTION_DOWN; break;
+		case 10:
+		case 11:
+		case 12: /* these don't actually exist on the device */
+			type = RATBAG_BUTTON_TYPE_UNKNOWN; break;
 		default:
 			break;
 		}
