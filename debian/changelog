@@ -1,8 +1,8 @@
-libratbag (0.4-1) UNRELEASED; urgency=medium
+libratbag (0.4-1) unstable; urgency=medium
 
   * New upstream release.
 
- -- Stephen Kitt <skitt@debian.org>  Wed, 16 Mar 2016 08:44:18 +0100
+ -- Stephen Kitt <skitt@debian.org>  Wed, 16 Mar 2016 08:56:01 +0100
 
 libratbag (0.3-2) unstable; urgency=medium
 
