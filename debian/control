@@ -15,7 +15,7 @@ Homepage: https://github.com/libratbag/libratbag/
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/libratbag.git
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/libratbag.git
 
-Package: liblur2
+Package: liblur3
 Architecture: linux-any
 Multi-Arch: same
 Depends: ${misc:Depends},
@@ -30,7 +30,7 @@ Package: liblur-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Depends: liblur2 (= ${binary:Version}),
+Depends: liblur3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Pre-Depends: ${misc:Pre-Depends}
@@ -42,7 +42,7 @@ Description: Logitech Unifying Receiver access library - dev files
  This package contains the files required to build software using
  liblur.
 
-Package: libratbag2
+Package: libratbag3
 Architecture: linux-any
 Multi-Arch: same
 Depends: ${misc:Depends},
@@ -60,7 +60,7 @@ Package: libratbag-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Depends: libratbag2 (= ${binary:Version}),
+Depends: libratbag3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: libratbag-doc
