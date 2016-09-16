@@ -1,0 +1,33 @@
+Description: Use package JS files for the documentation
+Author: Stephen Kitt <skitt@debian.org>
+
+--- a/doc/style/header.html
++++ b/doc/style/header.html
+@@ -9,7 +9,7 @@
+         <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
+         <meta name="generator" content="Doxygen $doxygenversion"/>
+         
+-        <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
++        <script type="text/javascript" src="file:///usr/share/javascript/jquery/jquery.js"></script>
+ 
+         <!--BEGIN PROJECT_NAME--><title>$projectname: $title</title><!--END PROJECT_NAME-->
+         <!--BEGIN !PROJECT_NAME--><title>$title</title><!--END !PROJECT_NAME-->
+@@ -22,7 +22,7 @@
+         $extrastylesheet
+ 
+         <link href="bootstrap.css" rel="stylesheet" type="text/css" />
+-        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
++        <script src="file:///usr/share/javascript/bootstrap/js/bootstrap.js"></script>
+         <script type="text/javascript" src="doxy-boot.js"></script>
+     </head>
+     <body>
+--- a/doc/libratbag.doxygen.in
++++ b/doc/libratbag.doxygen.in
+@@ -13,6 +13,7 @@
+ GENERATE_HTML          = YES
+ HTML_TIMESTAMP         = YES
+ USE_MATHJAX            = YES
++MATHJAX_RELPATH        = file:///usr/share/javascript/mathjax
+ GENERATE_LATEX         = NO
+ MACRO_EXPANSION        = YES
+ EXPAND_ONLY_PREDEF     = YES
