@@ -1,4 +1,4 @@
-libratbag (0.5-1) UNRELEASED; urgency=medium
+libratbag (0.5-1) unstable; urgency=medium
 
   * New upstream release.
   * Add build-dependency on check for the tests (but disable
@@ -6,7 +6,7 @@ libratbag (0.5-1) UNRELEASED; urgency=medium
   * Clean up debian/control with cme.
   * Standards-Version 3.9.8, no change required.
 
- -- Stephen Kitt <skitt@debian.org>  Fri, 16 Sep 2016 17:18:00 +0200
+ -- Stephen Kitt <skitt@debian.org>  Fri, 16 Sep 2016 17:55:25 +0200
 
 libratbag (0.4-2) unstable; urgency=medium
 
