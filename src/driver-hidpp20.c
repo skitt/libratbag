@@ -117,7 +117,7 @@ hidpp20drv_read_macro_key_8100(struct ratbag_device *device, union hidpp20_macro
 	return ratbag_hidraw_get_keycode_from_keyboard_usage(device, macro->key.key);
 }
 
-static void
+static int
 hidpp20drv_read_macro_8100(struct ratbag_button *button,
 			   struct hidpp20_profile *profile,
 			   union hidpp20_button_binding *binding)
@@ -129,6 +129,9 @@ hidpp20drv_read_macro_8100(struct ratbag_button *button,
 	bool delay = true;
 
 	macro = profile->macros[binding->macro.page];
+
+	if (!macro)
+		return -EINVAL;
 
 	i = 0;
 
@@ -175,6 +178,8 @@ hidpp20drv_read_macro_8100(struct ratbag_button *button,
 
 	ratbag_button_copy_macro(button, m);
 	ratbag_button_macro_unref(m);
+
+	return 0;
 }
 
 static void
@@ -183,6 +188,7 @@ hidpp20drv_read_button_8100(struct ratbag_button *button)
 	struct ratbag_device *device = button->profile->device;
 	struct hidpp20drv_data *drv_data = ratbag_get_drv_data(device);
 	struct hidpp20_profile *profile;
+	int rc;
 
 	if (!(drv_data->capabilities & HIDPP_CAP_ONBOARD_PROFILES_8100))
 		return;
@@ -213,7 +219,9 @@ hidpp20drv_read_button_8100(struct ratbag_button *button)
 		button->action.action.special = hidpp20_onboard_profiles_get_special(profile->buttons[button->index].special.special);
 		break;
 	case HIDPP20_BUTTON_MACRO:
-		hidpp20drv_read_macro_8100(button, profile, &profile->buttons[button->index]);
+		rc = hidpp20drv_read_macro_8100(button, profile, &profile->buttons[button->index]);
+		if (rc)
+			button->action.type = RATBAG_BUTTON_ACTION_TYPE_NONE;
 		break;
 	default:
 		button->action.type = RATBAG_BUTTON_ACTION_TYPE_UNKNOWN;
@@ -584,13 +592,17 @@ hidpp20drv_read_profile_8100(struct ratbag_profile *profile, unsigned int index)
 	struct hidpp20drv_data *drv_data = ratbag_get_drv_data(device);
 	struct ratbag_resolution *res;
 	struct hidpp20_profile *p;
-	unsigned i, dpi;
+	unsigned i, dpi = 0;
 
 	hidpp20drv_read_onboard_profile(device, profile->index);
 
 	profile->is_active = false;
 	if ((int)index == hidpp20drv_current_profile(device))
 		profile->is_active = true;
+
+	/* retrieve the resolution through 220X as the profile doesn't has it */
+	if (profile->is_active)
+		hidpp20drv_read_resolution_dpi(profile);
 
 	dpi = ratbag_resolution_get_dpi(profile->resolution.modes);
 
@@ -656,13 +668,13 @@ hidpp20drv_init_feature(struct ratbag_device *device, uint16_t feature)
 	}
 	case HIDPP_PAGE_ADJUSTABLE_DPI: {
 		log_debug(ratbag, "device has adjustable dpi\n");
-		ratbag_device_set_capability(device, RATBAG_DEVICE_CAP_SWITCHABLE_RESOLUTION);
-		drv_data->capabilities |= HIDPP_CAP_SWITCHABLE_RESOLUTION_2201;
 		/* we read the profile once to get the correct number of
 		 * supported resolutions. */
 		rc = hidpp20drv_read_resolution_dpi_2201(device);
 		if (rc < 0)
-			return rc;
+			return 0; /* this is not a hard failure */
+		ratbag_device_set_capability(device, RATBAG_DEVICE_CAP_SWITCHABLE_RESOLUTION);
+		drv_data->capabilities |= HIDPP_CAP_SWITCHABLE_RESOLUTION_2201;
 		break;
 	}
 	case HIDPP_PAGE_SPECIAL_KEYS_BUTTONS: {
@@ -773,6 +785,26 @@ hidpp20_log(void *userdata, enum hidpp_log_priority priority, const char *format
 	log_msg_va(device->ratbag, priority, format, args);
 }
 
+static void
+hidpp20drv_remove(struct ratbag_device *device)
+{
+	struct hidpp20drv_data *drv_data = ratbag_get_drv_data(device);
+	struct hidpp20_device *dev = drv_data->dev;
+
+	if (!device)
+		return;
+
+	ratbag_close_hidraw(device);
+
+	if (drv_data->profiles)
+		hidpp20_onboard_profiles_destroy(dev, drv_data->profiles);
+	free(drv_data->controls);
+	free(drv_data->sensors);
+	if (drv_data->dev)
+		hidpp20_device_destroy(drv_data->dev);
+	free(drv_data);
+}
+
 static int
 hidpp20drv_probe(struct ratbag_device *device)
 {
@@ -780,28 +812,41 @@ hidpp20drv_probe(struct ratbag_device *device)
 	struct hidpp20drv_data *drv_data;
 	struct hidpp_device base;
 	struct hidpp20_device *dev;
+	const char *prop;
+	int device_idx = HIDPP_RECEIVER_IDX;
+	int nread = 0;
 
 	rc = ratbag_find_hidraw(device, hidpp20drv_test_hidraw);
-	if (rc == -ENODEV) {
+	if (rc)
 		return rc;
-	} else if (rc) {
-		log_error(device->ratbag,
-			  "Can't open corresponding hidraw node: '%s' (%d)\n",
-			  strerror(-rc),
-			  rc);
-		return -ENODEV;
-	}
 
 	drv_data = zalloc(sizeof(*drv_data));
 	ratbag_set_drv_data(device, drv_data);
 	hidpp_device_init(&base, device->hidraw.fd);
 	hidpp_device_set_log_handler(&base, hidpp20_log, HIDPP_LOG_PRIORITY_RAW, device);
 
-	dev = hidpp20_device_new(&base, HIDPP_RECEIVER_IDX);
+	prop = ratbag_device_get_udev_property(device, "RATBAG_HIDPP20_INDEX");
+	if (prop) {
+		sscanf(prop, "%d%n", &device_idx, &nread);
+		if (!nread || (prop[nread]) != '\0' || device_idx < 0) {
+			log_error(device->ratbag,
+				  "Error parsing RATBAG_HIDPP20_INDEX: '%s' for %s\n",
+				  prop,
+				  device->name);
+			device_idx = HIDPP_RECEIVER_IDX;
+		}
+	}
+
+	/* In the general case, we can treat all devices as wired devices
+	 * here. If we talk to the correct hidraw device the kernel adjusts
+	 * the device index for us, so even for unifying receiver devices
+	 * we can just use 0xff as device index.
+	 *
+	 * If there is a special need like for G900, we can pass a
+	 * udev prop RATBAG_HIDPP20_INDEX.
+	 */
+	dev = hidpp20_device_new(&base, device_idx);
 	if (!dev) {
-		log_error(device->ratbag,
-			  "Failed to get HID++2.0 device for %s\n",
-			  device->name);
 		rc = -ENODEV;
 		goto err;
 	}
@@ -815,11 +860,9 @@ hidpp20drv_probe(struct ratbag_device *device)
 	drv_data->num_resolutions = 1;
 	drv_data->num_buttons = 8;
 
-	if (dev->proto_major >= 2) {
-		rc = hidpp20drv_20_probe(device);
-		if (rc)
-			goto err;
-	}
+	rc = hidpp20drv_20_probe(device);
+	if (rc)
+		goto err;
 
 	ratbag_device_init_profiles(device,
 				    drv_data->num_profiles,
@@ -828,25 +871,8 @@ hidpp20drv_probe(struct ratbag_device *device)
 
 	return rc;
 err:
-	free(drv_data);
-	ratbag_set_drv_data(device, NULL);
+	hidpp20drv_remove(device);
 	return rc;
-}
-
-static void
-hidpp20drv_remove(struct ratbag_device *device)
-{
-	struct hidpp20drv_data *drv_data = ratbag_get_drv_data(device);
-	struct hidpp20_device *dev = drv_data->dev;
-
-	ratbag_close_hidraw(device);
-
-	if (drv_data->profiles)
-		hidpp20_onboard_profiles_destroy(dev, drv_data->profiles);
-	free(drv_data->controls);
-	free(drv_data->sensors);
-	hidpp20_device_destroy(drv_data->dev);
-	free(drv_data);
 }
 
 struct ratbag_driver hidpp20_driver = {

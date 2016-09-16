@@ -1,7 +1,7 @@
 AC_PREREQ([2.64])
 
 m4_define([libratbag_major_version], [0])
-m4_define([libratbag_minor_version], [4])
+m4_define([libratbag_minor_version], [5])
 m4_define([libratbag_micro_version], [0])
 m4_define([libratbag_version],
           [libratbag_major_version.libratbag_minor_version.libratbag_micro_version])
@@ -30,8 +30,8 @@ AM_INIT_AUTOMAKE([1.11 foreign no-dist-gzip dist-xz])
 # b) If interfaces have been changed or added, but binary compatibility has
 #    been preserved, change to C+1:0:A+1
 # c) If the interface is the same as the previous version, change to C:R+1:A
-LIBRATBAG_LT_VERSION=3:0:0
-LIBLUR_LT_VERSION=3:0:0
+LIBRATBAG_LT_VERSION=3:1:0
+LIBLUR_LT_VERSION=3:1:0
 AC_SUBST(LIBRATBAG_LT_VERSION)
 AC_SUBST(LIBLUR_LT_VERSION)
 
@@ -62,7 +62,7 @@ AC_ARG_WITH(udev-base-dir, AS_HELP_STRING([--with-udev-base-dir=DIR], [where ude
 if test -n "$with_udev_base_dir" ; then
 	UDEV_BASE_DIR="$with_udev_base_dir"
 else
-	UDEV_BASE_DIR="/usr/lib/udev"
+	UDEV_BASE_DIR="$prefix/lib/udev"
 fi
 AC_SUBST(UDEV_BASE_DIR)
 

@@ -35,8 +35,6 @@
 
 #include "config.h"
 
-#define USB_VENDOR_ID_LOGITECH			0x046d
-
 #include <linux/types.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -45,6 +43,7 @@
 #include <unistd.h>
 
 #include "hidpp10.h"
+#include "usb-ids.h"
 
 #include "libratbag-private.h"
 #include "libratbag-hidraw.h"
@@ -504,16 +503,8 @@ hidpp10drv_probe(struct ratbag_device *device)
 	int nread = 0;
 
 	rc = ratbag_find_hidraw(device, hidpp10drv_test_hidraw);
-	if (rc == -ENODEV) {
-		return rc;
-	} else if (rc) {
-		log_error(device->ratbag,
-			  "Can't open corresponding hidraw node: '%s' (%d)\n",
-			  strerror(-rc),
-			  rc);
-		rc = -ENODEV;
+	if (rc)
 		goto err;
-	}
 
 	drv_data = zalloc(sizeof(*drv_data));
 	hidpp_device_init(&base, device->hidraw.fd);
