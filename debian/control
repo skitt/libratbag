@@ -11,10 +11,10 @@ Build-Depends: check,
                libudev-dev,
                pkg-config,
                valgrind
-Standards-Version: 3.9.7
-Homepage: https://github.com/libratbag/libratbag/
+Standards-Version: 3.9.8
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/libratbag.git
 Vcs-Git: https://anonscm.debian.org/git/collab-maint/libratbag.git
+Homepage: https://github.com/libratbag/libratbag/
 
 Package: liblur3
 Architecture: linux-any
@@ -63,8 +63,10 @@ Architecture: all
 Multi-Arch: foreign
 Depends: ${misc:Depends}
 Pre-Depends: ${misc:Pre-Depends}
-Breaks: libratbag2, libratbag3 (<< 0.4-2)
-Replaces: libratbag2, libratbag3 (<< 0.4-2)
+Breaks: libratbag2,
+        libratbag3 (<< 0.4-2)
+Replaces: libratbag2,
+          libratbag3 (<< 0.4-2)
 Description: configuration library for gaming mice - common files
  libratbag is a configuration library for gaming mice. It provides a
  generic way to access the various features exposed by these mice and
@@ -98,7 +100,10 @@ Description: configuration library for gaming mice - development files
 Package: libratbag-doc
 Architecture: all
 Section: doc
-Depends: libjs-jquery, libjs-bootstrap, libjs-mathjax, ${misc:Depends}
+Depends: libjs-jquery,
+         libjs-bootstrap,
+         libjs-mathjax,
+         ${misc:Depends}
 Pre-Depends: ${misc:Pre-Depends}
 Description: configuration library for gaming mice - documentation
  libratbag is a configuration library for gaming mice. It provides a
