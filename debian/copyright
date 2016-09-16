@@ -5,7 +5,7 @@ Source: https://github.com/libratbag/libratbag
 Files: *
 Copyright: 2013 Jonas Ådahl
            2013-2015 Benjamin Tissoires
-           2013-2015 Red Hat, Inc.
+           2013-2016 Red Hat, Inc.
 License: MIT
 
 Files: src/libratbag-util.*

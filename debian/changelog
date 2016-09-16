@@ -1,3 +1,9 @@
+libratbag (0.5-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Stephen Kitt <skitt@debian.org>  Fri, 16 Sep 2016 17:18:00 +0200
+
 libratbag (0.4-2) unstable; urgency=medium
 
   * Split the common files out, otherwise transitions will be
