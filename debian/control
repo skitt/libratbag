@@ -2,7 +2,8 @@ Source: libratbag
 Maintainer: Stephen Kitt <skitt@debian.org>
 Section: libs
 Priority: optional
-Build-Depends: debhelper (>= 9),
+Build-Depends: check,
+               debhelper (>= 9),
                dh-autoreconf,
                doxygen,
                graphviz,

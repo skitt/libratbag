@@ -1,0 +1,19 @@
+Description: Disable symbols-leak-test
+Author: Stephen Kitt <skitt@debian.org>
+
+symbols-leak-test blows up because valgrind picks up strange behaviour
+in bash's globbing code (in version 4.3). This patch disables it for
+now.
+
+--- a/test/Makefile.am
++++ b/test/Makefile.am
+@@ -20,8 +20,7 @@
+ 	test-build-std-gnuc90
+ 
+ noinst_PROGRAMS = $(build_tests) $(run_tests)
+-noinst_SCRIPTS = symbols-leak-test
+-TESTS = $(run_tests) symbols-leak-test
++TESTS = $(run_tests)
+ 
+ test_context_SOURCES = test-context.c
+ test_context_LDADD = $(TEST_LIBS)
