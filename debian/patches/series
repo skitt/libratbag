@@ -1,2 +1,3 @@
 use-packaged-doc-deps.patch
 disable-symbols-leak-test.patch
+configure-valgrind.patch
