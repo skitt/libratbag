@@ -305,7 +305,7 @@ hidpp10_get_hidpp_notifications(struct hidpp10_device *dev,
 		return res;
 
 	*reporting_flags = notifications.msg.parameters[0];
-	*reporting_flags |= (notifications.msg.parameters[0] & 0x1F) << 8;
+	*reporting_flags |= (notifications.msg.parameters[1] & 0x1F) << 8;
 	*reporting_flags |= (notifications.msg.parameters[2] & 0x7 ) << 16;
 
 	return res;
@@ -1397,7 +1397,7 @@ hidpp10_profile_set_names(struct hidpp10_device *dev, struct hidpp10_profile *pr
 	memcpy(metadata->lgs02.marker, "LGS02", sizeof(metadata->lgs02.marker));
 	hidpp10_uchar8_to_uchar16(metadata->lgs02.name,
 				  profile->name,
-				  sizeof(metadata->lgs02.name));
+				  ARRAY_LENGTH(metadata->lgs02.name));
 	for (i = 0; i < ARRAY_LENGTH(metadata->lgs02.macro_names); i++) {
 		hidpp10_uchar8_to_uchar16(metadata->lgs02.macro_names[i],
 					  profile->macro_names[i],
@@ -1582,11 +1582,12 @@ static const enum ratbag_button_action_special hidpp10_profiles_specials[] = {
 	[0x02] = RATBAG_BUTTON_ACTION_SPECIAL_WHEEL_RIGHT,
 	[0x03] = RATBAG_BUTTON_ACTION_SPECIAL_BATTERY_LEVEL,
 	[0x04] = RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_UP,
+	[0x05] = RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_UP,
 
-	[0x05 ... 0x07] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
+	[0x06 ... 0x07] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
 
 	[0x08] = RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_DOWN,
-	[0x09] = RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_UP,
+	[0x09] = RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_DOWN,
 
 	[0x0a ... 0x0f] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
 
@@ -1596,8 +1597,9 @@ static const enum ratbag_button_action_special hidpp10_profiles_specials[] = {
 	[0x12 ... 0x1f] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
 
 	[0x20] = RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_DOWN,
+	[0x21] = RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_CYCLE_DOWN,
 
-	[0x21 ... 0xff] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
+	[0x22 ... 0xff] = RATBAG_BUTTON_ACTION_SPECIAL_INVALID,
 };
 
 enum ratbag_button_action_special

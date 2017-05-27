@@ -26,12 +26,11 @@
  *   https://drive.google.com/folderview?id=0BxbRzx7vEV7eWmgwazJ3NUFfQ28&usp=sharing
  */
 
+#pragma once
+
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
-
-#ifndef HIDPP_GENERIC_H
-#define HIDPP_GENERIC_H
 
 #define HIDPP_RECEIVER_IDX			0xFF
 #define HIDPP_WIRED_DEVICE_IDX			0x00
@@ -105,6 +104,12 @@ hidpp20_1b04_get_physical_mapping_name(uint16_t value);
 
 enum ratbag_button_type
 hidpp20_1b04_get_physical_mapping(uint16_t value);
+
+enum ratbag_led_type
+hidpp20_8070_get_location_mapping(uint16_t value);
+
+const char *
+hidpp20_8070_get_location_mapping_name(uint16_t value);
 
 const char *
 hidpp20_1b04_get_logical_mapping_name(uint16_t value);
@@ -205,5 +210,3 @@ hidpp_get_unaligned_be_u32(uint8_t *buf)
 {
 	return (buf[0] << 24) | (buf[1] << 16) | (buf[2] << 8) | buf[3];
 }
-
-#endif /* HIDPP_GENERIC_H */

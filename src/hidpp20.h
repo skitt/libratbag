@@ -26,8 +26,7 @@
  *   https://drive.google.com/folderview?id=0BxbRzx7vEV7eWmgwazJ3NUFfQ28&usp=sharing
  */
 
-#ifndef HIDPP_20_H
-#define HIDPP_20_H
+#pragma once
 
 #include <stdint.h>
 
@@ -115,6 +114,13 @@ enum hidpp20_battery_status {
 	BATTERY_STATUS_THERMAL_ERROR,
 	BATTERY_STATUS_OTHER_CHARGING_ERROR,
 	BATTERY_STATUS_INVALID,
+};
+
+enum hidpp20_led_mode {
+	HIDPP20_LED_OFF = 0x00,
+	HIDPP20_LED_ON = 0x01,
+	HIDPP20_LED_CYCLE = 0x03,
+	HIDPP20_LED_BREATHING = 0x0a,
 };
 
 /**
@@ -258,6 +264,41 @@ int hidpp20_adjustable_dpi_set_sensor_dpi(struct hidpp20_device *device,
 
 #define HIDPP_PAGE_COLOR_LED_EFFECTS			0x8070
 
+
+struct hidpp20_color_led_info;
+
+struct hidpp20_color_led_zone_info;
+
+int
+hidpp20_color_led_effects_get_zone_info(struct hidpp20_device *device,
+					uint8_t reg, struct hidpp20_color_led_zone_info *info);
+
+int
+hidpp20_color_led_effects_get_zone_infos(struct hidpp20_device *device,
+					 struct hidpp20_color_led_zone_info **infos_list);
+
+enum hidpp20_color_led_location {
+	HIDPP20_COLOR_LED_LOCATION_UNDEFINED = 0,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY,
+	HIDPP20_COLOR_LED_LOCATION_LOGO,
+	HIDPP20_COLOR_LED_LOCATION_LEFT,
+	HIDPP20_COLOR_LED_LOCATION_RIGHT,
+	HIDPP20_COLOR_LED_LOCATION_COMBINED,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_1,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_2,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_3,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_4,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_5,
+	HIDPP20_COLOR_LED_LOCATION_PRIMARY_6,
+};
+
+enum hidpp20_color_led_persistency {
+	HIDPP20_COLOR_LED_PERSISTENCY_UNSUPPORTED,
+	HIDPP20_COLOR_LED_PERSISTENCY_ON,
+	HIDPP20_COLOR_LED_PERSISTENCY_OFF,
+	HIDPP20_COLOR_LED_PERSISTENCY_ON_OFF,
+};
+
 /* -------------------------------------------------------------------------- */
 /* 0x8100 - Onboard Profiles                                                  */
 /* -------------------------------------------------------------------------- */
@@ -276,6 +317,7 @@ int hidpp20_adjustable_dpi_set_sensor_dpi(struct hidpp20_device *device,
 #define HIDPP20_MODIFIER_KEY_SHIFT			0x02
 
 #define HIDPP20_DPI_COUNT				5
+#define HIDPP20_LED_COUNT				2
 
 union hidpp20_button_binding {
 	struct {
@@ -316,6 +358,68 @@ union hidpp20_button_binding {
 	} disabled;
 } __attribute__((packed));
 _Static_assert(sizeof(union hidpp20_button_binding) == 4, "Invalid size");
+
+struct hidpp20_color_led_info {
+	uint8_t zone_count;
+	/* we don't care about NV capabilities for libratbag, they just
+	 * indicate sale demo effects */
+	uint16_t nv_caps;
+	uint16_t ext_caps;
+} __attribute__((packed));
+_Static_assert(sizeof(struct hidpp20_color_led_info) == 5, "Invalid size");
+
+struct hidpp20_color_led_zone_info {
+	uint8_t index;
+	uint16_t location;
+	uint8_t num_effects;
+	uint8_t persistency_caps;
+} __attribute__((packed));
+_Static_assert(sizeof(struct hidpp20_color_led_zone_info) == 5, "Invalid size");
+
+struct hidpp20_color {
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+} __attribute__((packed));
+_Static_assert(sizeof(struct hidpp20_color) == 3, "Invalid size");
+
+enum hidpp20_led_type {
+	HIDPP20_LED_UNKNOWN = -1,
+	HIDPP20_LED_LOGO = 0,
+	HIDPP20_LED_SIDE,
+};
+
+struct hidpp20_internal_led {
+	uint8_t mode; /* 00 - off; 01 - on; 03 - cycle; 0a - breath */
+	struct hidpp20_color color;
+	union {
+		struct hidpp20_led_cycle {
+			uint16_t pad_1;
+			uint16_t rate;  /* 16000 - 20000Hz */
+			uint8_t brightness; /* 0 - 100 percent */
+			uint16_t pad_2;
+		} __attribute__((packed)) cycle;
+		struct hidpp20_led_breath {
+			uint16_t rate;
+			uint8_t pad_1;
+			uint8_t brightness;
+			uint8_t pad_2;
+			uint16_t pad_3;
+		} __attribute__((packed)) breath;
+	} __attribute__((packed)) effect;
+};
+_Static_assert(sizeof(struct hidpp20_led_cycle) == 7, "Invalid size");
+_Static_assert(sizeof(struct hidpp20_led_breath) == 7, "Invalid size");
+_Static_assert(sizeof(struct hidpp20_internal_led) == 11, "Invalid size");
+
+typedef uint8_t percent_t;
+
+struct hidpp20_led {
+	enum hidpp20_led_mode mode;
+	struct hidpp20_color color;
+	uint16_t rate;
+	percent_t brightness;
+};
 
 #define HIDPP20_MACRO_NOOP			0x01
 #define HIDPP20_MACRO_DELAY			0x40
@@ -358,6 +462,7 @@ struct hidpp20_profile {
 	uint16_t dpi[HIDPP20_DPI_COUNT];
 	union hidpp20_button_binding buttons[32];
 	union hidpp20_macro_data *macros[32];
+	struct hidpp20_led leds[32];
 };
 
 struct hidpp20_profiles {
@@ -365,6 +470,7 @@ struct hidpp20_profiles {
 	uint8_t num_rom_profiles;
 	uint8_t num_buttons;
 	uint8_t num_modes;
+	uint8_t num_leds;
 	uint8_t has_g_shift;
 	uint8_t has_dpi_shift;
 	uint8_t corded;
@@ -437,5 +543,3 @@ hidpp20_onboard_profiles_read_memory(struct hidpp20_device *device,
 #define HIDPP_PAGE_MOUSE_BUTTON_SPY			0x8110
 
 
-
-#endif /* HIDPP_20_H */

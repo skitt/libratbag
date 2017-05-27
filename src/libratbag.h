@@ -21,8 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef LIBRATBAG_H
-#define LIBRATBAG_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +29,7 @@ extern "C" {
 
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <libudev.h>
 
 #define LIBRATBAG_ATTRIBUTE_PRINTF(_format, _args) \
@@ -53,6 +53,8 @@ extern "C" {
  * active.
  *
  * @defgroup button Button configuration
+ *
+ * @defgroup led LED configuration
  *
  * @defgroup resolution Resolution and frequency mappings
  *
@@ -126,6 +128,28 @@ struct ratbag_button;
 struct ratbag_resolution;
 
 /**
+ * @ingroup led
+ * @struct ratbag_color
+ *
+ * Represents LED color in RGB format.
+ * each color component is integer 0 - 255
+ */
+
+struct ratbag_color {
+	unsigned int red;
+	unsigned int green;
+	unsigned int blue;
+};
+
+/**
+ * @ingroup led
+ * @struct ratbag_led
+ *
+ * Represents a led on the device.
+ */
+struct ratbag_led;
+
+/**
  * @ingroup button
  * @struct ratbag_macro
  *
@@ -151,7 +175,7 @@ enum ratbag_error_code {
 	RATBAG_ERROR_DEVICE = -1000,
 
 	/**
-	 * Insufficient capabilities. This error occurs when a requestd change is
+	 * Insufficient capabilities. This error occurs when a requested change is
 	 * beyond the device's capabilities.
 	 */
 	RATBAG_ERROR_CAPABILITY = -1001,
@@ -491,6 +515,11 @@ enum ratbag_device_capability {
 	RATBAG_DEVICE_CAP_BUTTON_KEY,
 
 	/**
+	 * The device supports assigning LED colors and effects
+	 */
+	RATBAG_DEVICE_CAP_LED,
+
+	/**
 	 * The device supports user-defined key or button sequences.
 	 */
 	RATBAG_DEVICE_CAP_BUTTON_MACROS,
@@ -519,6 +548,15 @@ enum ratbag_device_capability {
 	 * libratbag can be used to query the device as normal.
 	 */
 	RATBAG_DEVICE_CAP_QUERY_CONFIGURATION,
+
+	/**
+	 * The device has the capability to disable and enable profiles.  While
+	 * profiles are not immediately deleted after being disabled, it is not
+	 * guaranteed that the device will remember any disabled profiles the
+	 * next time ratbag runs. Furthermore, the order of profiles may get
+	 * changed the next time ratbag runs if profiles are disabled.
+	 */
+	RATBAG_DEVICE_CAP_DISABLE_PROFILE,
 };
 
 /**
@@ -536,6 +574,18 @@ enum ratbag_device_capability {
 int
 ratbag_device_has_capability(const struct ratbag_device *device,
 			     enum ratbag_device_capability cap);
+
+/**
+ * @ingroup device
+ *
+ * Write any changes to the device. Depending on the device, this may take
+ * a couple of seconds.
+ *
+ * @param device A previously initialized ratbag device
+ * @return 0 on success or an error code otherwise
+ */
+enum ratbag_error_code
+ratbag_device_commit(struct ratbag_device *device);
 
 /**
  * @ingroup device
@@ -567,6 +617,17 @@ unsigned int
 ratbag_device_get_num_buttons(struct ratbag_device *device);
 
 /**
+ * @ingroup device
+ *
+ * Return the number of LEDs available on this device.
+ *
+ * @param device A previously initialized ratbag device
+ * @return The number of LEDs available on this device.
+ */
+unsigned int
+ratbag_device_get_num_leds(struct ratbag_device *device);
+
+/**
  * @ingroup profile
  *
  * Add a reference to the profile. A profile is destroyed whenever the
@@ -590,6 +651,34 @@ ratbag_profile_ref(struct ratbag_profile *profile);
  */
 struct ratbag_profile *
 ratbag_profile_unref(struct ratbag_profile *profile);
+
+/**
+ * @ingroup profile
+ *
+ * Enable/disable the ratbag profile. For this to work, the device must support
+ * @ref RATBAG_DEVICE_CAP_DISABLE_PROFILE.
+ *
+ * @param profile A previously initialized ratbag profile
+ * @param enabled Whether to enable or disable the profile
+ *
+ * @return 0 on success or an error code otherwise
+ */
+enum ratbag_error_code
+ratbag_profile_set_enabled(struct ratbag_profile *profile, bool enabled);
+
+/**
+ * @ingroup profile
+ *
+ * Check whether the ratbag profile is enabled or not. For devices that don't
+ * support @ref RATBAG_DEVICE_CAP_DISABLE_PROFILE the profile will always be
+ * set to enabled.
+ *
+ * @param profile A previously initialized ratbag profile
+ *
+ * @return Whether the profile is enabled or not.
+ */
+bool
+ratbag_profile_is_enabled(const struct ratbag_profile *profile);
 
 /**
  * @ingroup profile
@@ -677,7 +766,7 @@ ratbag_profile_set_active(struct ratbag_profile *profile);
  *
  * @param profile A previously initialized ratbag profile
  *
- * @return The number of profiles available.
+ * @return The number of resolutions available.
  */
 unsigned int
 ratbag_profile_get_num_resolutions(struct ratbag_profile *profile);
@@ -885,12 +974,17 @@ ratbag_resolution_get_dpi_y(struct ratbag_resolution *resolution);
 /**
  * @ingroup resolution
  *
- * Set the the report rate in Hz for the resolution mode.
+ * Set the report rate in Hz for the resolution mode.
  *
  * A value of 0 hz disables the mode.
  *
  * If the resolution mode is the currently active mode and the profile is
  * the currently active profile, the change takes effect immediately.
+ *
+ * If the resolution does not have the @ref
+ * RATBAG_RESOLUTION_CAP_INDIVIDUAL_REPORT_RATE capability, changing the
+ * report rate on one resolution changes the report rate for all resolutions
+ * in this profile.
  *
  * @param resolution A previously initialized ratbag resolution
  * @param hz Set to the report rate in Hz, may be 0
@@ -904,14 +998,9 @@ ratbag_resolution_set_report_rate(struct ratbag_resolution *resolution,
 /**
  * @ingroup resolution
  *
- * Get the the report rate in Hz for the resolution mode.
+ * Get the report rate in Hz for the resolution mode.
  *
  * A value of 0 hz indicates the mode is disabled.
- *
- * If the resolution does not have the @ref
- * RATBAG_RESOLUTION_CAP_INDIVIDUAL_REPORT_RATE capability, changing the
- * report rate on one resolution changes the report rate for all resolutions
- * in this profile.
  *
  * @param resolution A previously initialized ratbag resolution
  *
@@ -1177,6 +1266,7 @@ enum ratbag_button_action_special {
 
 	/* DPI switch */
 	RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_UP,
+	RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_DOWN,
 	RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_UP,
 	RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_DOWN,
 	RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_ALTERNATE,
@@ -1184,6 +1274,7 @@ enum ratbag_button_action_special {
 
 	/* Profile */
 	RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_CYCLE_UP,
+	RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_CYCLE_DOWN,
 	RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_UP,
 	RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_DOWN,
 
@@ -1248,6 +1339,172 @@ ratbag_button_set_button(struct ratbag_button *button,
  */
 enum ratbag_button_action_special
 ratbag_button_get_special(struct ratbag_button *button);
+
+/**
+ * @ingroup led
+ *
+ * RATBAG_LED_OFF - led is now off,
+ * RATBAG_LED_ON - led is on with static color,
+ * RATBAG_LED_CYCLE - led is cycling between all colors.
+ * RATBAG_LED_BREATHING - led is pulsating with static color
+ *
+ * Each LED mode has different properties, e.g. the brightness and rate are only
+ * available in modes @ref RATBAG_LED_CYCLE and @ref RATBAG_LED_BREATHING modes
+ */
+enum ratbag_led_mode {
+	RATBAG_LED_OFF = 0,
+	RATBAG_LED_ON,
+	RATBAG_LED_CYCLE,
+	RATBAG_LED_BREATHING,
+};
+/**
+ * @ingroup led
+ *
+ * LED types, usually based on their physical location
+ */
+enum ratbag_led_type {
+	RATBAG_LED_TYPE_UNKNOWN = -1,
+	RATBAG_LED_TYPE_LOGO = 0,
+	RATBAG_LED_TYPE_SIDE
+};
+
+/**
+ * @ingroup led
+ *
+ * Return a reference to the LED given by the index. The order of the
+ * LEDs is device-specific though.
+ *
+ * The LED is refcounted with an initial value of at least 1.
+ * Use ratbag_led_unref() to release the LED.
+ *
+ * @param profile A previously initialized ratbag profile
+ * @param index The index of the LED
+ *
+ * @return A LED context, or NULL if the LED does not exist.
+ *
+ * @see ratbag_device_get_profile
+ */
+struct ratbag_led *
+ratbag_profile_get_led(struct ratbag_profile *profile, unsigned int index);
+/**
+ * @ingroup led
+ *
+ * This function returns the type for ratbag_led.
+ *
+ * @param led A previously initialized ratbag LED
+ * @return The LED type @ref ratbag_led_type
+ *
+ * @see ratbag_led_set_mode
+ */
+enum ratbag_led_type
+ratbag_led_get_type(struct ratbag_led *led);
+/**
+ * @ingroup led
+ *
+ * This function returns the mode for ratbag_led.
+ *
+ * @param led A previously initialized ratbag LED
+ * @return The LED mod @ref ratbag_led_mode
+ *
+ * @see ratbag_led_set_mode
+ */
+enum ratbag_led_mode
+ratbag_led_get_mode(struct ratbag_led *led);
+/**
+ * @ingroup led
+ *
+ * This function returns the led color.
+ *
+ * @param led A previously initialized ratbag LED
+ * @return The LED color in @ref ratbag_led_mode
+ *
+ * @see ratbag_led_set_color
+ */
+struct ratbag_color
+ratbag_led_get_color(struct ratbag_led *led);
+/**
+ * @ingroup led
+ *
+ * This function returns the LED effect rate.
+ *
+ * @param led A previously initialized ratbag LED
+ * @return The LED rate in Hz, can be 100 - 20000
+ *
+ * @see ratbag_led_set_effect_rate
+ */
+int
+ratbag_led_get_effect_rate(struct ratbag_led *led);
+/**
+ * @ingroup led
+ *
+ * This function returns the LED brightness.
+ *
+ * @param led A previously initialized ratbag LED
+ * @return The LED brightness 0 - 255
+ *
+ * @see ratbag_led_get_brightness
+ */
+unsigned int
+ratbag_led_get_brightness(struct ratbag_led *led);
+
+/**
+ * @ingroup led
+ *
+ * this function sets the LED mode.
+ *
+ * @param led A previously initialized ratbag LED
+ * @param mode LED mode @ref ratbag_led_mode.
+ * @return 0 on success or an error code otherwise.
+ *
+ * @see ratbag_led_get_mode
+ */
+enum ratbag_error_code
+ratbag_led_set_mode(struct ratbag_led *led, enum ratbag_led_mode mode);
+
+/**
+ * @ingroup led
+ *
+ * If the LED's mode is @ref RATBAG_LED_ON or @ref RATBAG_LED_BREATHING
+ * then this function sets the LED color, otherwise it has no effect.
+ *
+ * @param led A previously initialized ratbag LED
+ * @param color A LED color.
+ * @return 0 on success or an error code otherwise.
+ *
+ * @see ratbag_led_get_color
+ */
+enum ratbag_error_code
+ratbag_led_set_color(struct ratbag_led *led, struct ratbag_color color);
+
+/**
+ * @ingroup led
+ *
+ * If the LED's mode is @ref RATBAG_LED_CYCLE or @ref RATBAG_LED_BREATHING
+ * then this function sets the LED rate in Hz
+ *
+ * @param led A previously initialized ratbag LED
+ * @param rate Effect rate in hz, 100 - 20000
+ * @return 0 on success or an error code otherwise.
+ *
+ * @see ratbag_led_get_effect_rate
+ */
+enum ratbag_error_code
+ratbag_led_set_effect_rate(struct ratbag_led *led, unsigned int rate);
+
+/**
+ * @ingroup led
+ *
+ * If the LED's mode is @ref RATBAG_LED_CYCLE or @ref RATBAG_LED_BREATHING
+ * then this function sets the LED brightness, otherwise it has no effect.
+ *
+ * @param led A previously initialized ratbag LED
+ * @param brightness Effect brightness 0 - 255
+ * @return 0 on success or an error code otherwise.
+ *
+ * @see ratbag_led_get_brightness
+ */
+enum ratbag_error_code
+ratbag_led_set_brightness(struct ratbag_led *led, unsigned int brightness);
 
 /**
  * @ingroup button
@@ -1532,7 +1789,31 @@ ratbag_button_ref(struct ratbag_button *button);
 struct ratbag_button *
 ratbag_button_unref(struct ratbag_button *button);
 
+/**
+ * @ingroup led
+ *
+ * Add a reference to the led. A led is destroyed whenever the
+ * reference count reaches 0. See @ref ratbag_led_unref.
+ *
+ * @param led A previously initialized valid ratbag led
+ * @return The passed ratbag led
+ */
+struct ratbag_led *
+ratbag_led_ref(struct ratbag_led *led);
+
+/**
+ * @ingroup led
+ *
+ * Dereference the ratbag led. When the internal refcount reaches
+ * zero, all resources associated with this object are released. The object
+ * must be considered invalid once unref is called.
+ *
+ * @param led A previously initialized ratbag led
+ * @return Always NULL
+ */
+struct ratbag_led *
+ratbag_led_unref(struct ratbag_led *led);
+
 #ifdef __cplusplus
 }
 #endif
-#endif /* LIBRATBAG_H */

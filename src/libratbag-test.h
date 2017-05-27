@@ -22,14 +22,14 @@
  */
 
 
-#ifndef LIBRATBAG_TEST_H
-#define LIBRATBAG_TEST_H
+#pragma once
 
 #include "libratbag.h"
 
 #define RATBAG_TEST_MAX_PROFILES 12
 #define RATBAG_TEST_MAX_BUTTONS 25
 #define RATBAG_TEST_MAX_RESOLUTIONS 8
+#define RATBAG_TEST_MAX_LEDS 8
 
 struct ratbag_test_button {
 	enum ratbag_button_action_type type;
@@ -48,9 +48,24 @@ struct ratbag_test_resolution {
 	uint32_t caps;
 };
 
+struct ratbag_test_color {
+	unsigned short red;
+	unsigned short green;
+	unsigned short blue;
+};
+
+struct ratbag_test_led {
+	enum ratbag_led_type type;
+	enum ratbag_led_mode mode;
+	struct ratbag_test_color color;
+	unsigned int hz;
+	unsigned int brightness;
+};
+
 struct ratbag_test_profile {
 	struct ratbag_test_button buttons[RATBAG_TEST_MAX_BUTTONS];
 	struct ratbag_test_resolution resolutions[RATBAG_TEST_MAX_RESOLUTIONS];
+	struct ratbag_test_led leds[RATBAG_TEST_MAX_LEDS];
 	bool active;
 	bool dflt;
 };
@@ -59,6 +74,7 @@ struct ratbag_test_device {
 	unsigned int num_profiles;
 	unsigned int num_resolutions;
 	unsigned int num_buttons;
+	unsigned int num_leds;
 	struct ratbag_test_profile profiles[RATBAG_TEST_MAX_PROFILES];
 	void (*destroyed)(struct ratbag_device *device, void *data);
 	void *destroyed_data;
@@ -67,4 +83,3 @@ struct ratbag_test_device {
 struct ratbag_device* ratbag_device_new_test_device(struct ratbag *ratbag,
 						    struct ratbag_test_device *test_device);
 
-#endif /* LIBRATBAG_TEST_H */

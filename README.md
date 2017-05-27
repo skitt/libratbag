@@ -1,5 +1,3 @@
-/*!@mainpage
-
 libratbag
 =========
 
@@ -67,6 +65,28 @@ Source
 
     git clone https://github.com/libratbag/libratbag.git
 
+Building
+--------
+
+libratbag uses the meson build system, see http://mesonbuild.com which in
+turn uses ninja to invoke the compiler (`ninja` may be `ninja-build` on your
+distribution). From a fresh git checkout, run the
+following commands to init the repository:
+
+    meson builddir --prefix=/usr/
+
+And to build or re-build after code-changes, run:
+
+    ninja -C builddir
+    sudo ninja -C builddir install
+
+Note: 'builddir' is the build output directory and can be changed to any
+other directory name. To set configure-time options, use e.g.
+
+    mesonconf builddir -Denable-documentation=no
+
+Run 'mesonconf builddir' to list the options.
+
 Bugs
 ----
 
@@ -100,5 +120,3 @@ libratbag is licensed under the MIT license.
 See the COPYING file for the full license information.
 
 [![Build Status](https://semaphoreci.com/api/v1/projects/7905244a-c0b5-468b-9071-d846de3ce9f1/545192/badge.svg)](https://semaphoreci.com/libratbag/libratbag)
-
-*/

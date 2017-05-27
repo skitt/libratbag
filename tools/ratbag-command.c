@@ -21,7 +21,8 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#define _GNU_SOURCE
+#include "config.h"
+
 #include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -34,9 +35,11 @@
 #include <sys/stat.h>
 #include <linux/input.h>
 
+#include "libratbag-version.h"
 #include "shared.h"
 
 enum options {
+	OPT_VERSION,
 	OPT_VERBOSE,
 	OPT_HELP,
 };
@@ -58,6 +61,7 @@ enum cmd_flags {
 	FLAG_NEED_PROFILE = 1 << 11,
 	FLAG_NEED_RESOLUTION = 1 << 12,
 	FLAG_NEED_BUTTON = 1 << 13,
+	FLAG_NEED_LED = 1 << 14,
 };
 
 struct ratbag_cmd_options {
@@ -66,6 +70,7 @@ struct ratbag_cmd_options {
 	struct ratbag_profile *profile;
 	struct ratbag_resolution *resolution;
 	struct ratbag_button *button;
+	struct ratbag_led *led;
 };
 
 struct ratbag_cmd {
@@ -101,6 +106,8 @@ usage(void)
 	       "Profile Commands:\n"
 	       "  profile active get		Print the currently active profile\n"
 	       "  profile active set N		Set profile N as to the  active profile\n"
+	       "  profile enable N              Enable profile N\n"
+	       "  profile disable N             Disable profile N\n"
 	       "  profile N {COMMAND}		Use profile N for COMMAND\n"
 	       "\n"
 	       "Resolution Commands\n"
@@ -143,12 +150,27 @@ usage(void)
 	       "\n"
 	       "  switch-etekcity		Switch the Etekcity mouse active profile\n"
 	       "\n"
+	       "LED Commands:\n"
+	       "  LED commands work on the given profile, or on the\n"
+	       "  active profile if none is given.\n"
+	       "\n"
+	       "  led N {COMMAND}\n"
+	       "                      get                                print the LED properties\n"
+	       "                      set {COMMAND}                      sets LED properties\n"
+	       "                           mode [on|off|cycle|breath]    sets LED mode\n"
+	       "                           color COLOR                   sets LED's color in hex format\n"
+	       "                           rate N                        sets LED's effect rate in Hz\n"
+	       "                           brightness N                  sets LED's effect brightness\n"
+	       "\n"
 	       "Examples:\n"
 	       "  %s profile active get\n"
 	       "  %s profile 0 resolution active set 4\n"
 	       "  %s profile 0 resolution 1 dpi get\n"
 	       "  %s resolution 4 rate get\n"
 	       "  %s dpi set 800\n"
+	       "  %s profile 0 led 0 set mode on\n"
+	       "  %s profile 0 led 0 set color ff00ff\n"
+	       "  %s profile 0 led 0 set rate 20\n"
 	       "\n"
 	       "Exit codes:\n"
 	       "  0	Success\n"
@@ -161,7 +183,16 @@ usage(void)
 		program_invocation_short_name,
 		program_invocation_short_name,
 		program_invocation_short_name,
+		program_invocation_short_name,
+		program_invocation_short_name,
+		program_invocation_short_name,
 		program_invocation_short_name);
+}
+
+static void
+version(void)
+{
+	printf("%s\n", LIBRATBAG_VERSION);
 }
 
 static inline int
@@ -194,9 +225,8 @@ static inline struct ratbag_profile *
 ratbag_cmd_get_active_profile(struct ratbag_device *device)
 {
 	struct ratbag_profile *profile = NULL;
-	int i;
 
-	for (i = 0; i < ratbag_device_get_num_profiles(device); i++) {
+	for (unsigned int i = 0; i < ratbag_device_get_num_profiles(device); i++) {
 		profile = ratbag_device_get_profile(device, i);
 		if (ratbag_profile_is_active(profile))
 			return profile;
@@ -215,9 +245,8 @@ static inline struct ratbag_resolution *
 ratbag_cmd_get_active_resolution(struct ratbag_profile *profile)
 {
 	struct ratbag_resolution *resolution = NULL;
-	int i;
 
-	for (i = 0; i < ratbag_profile_get_num_resolutions(profile); i++) {
+	for (unsigned int i = 0; i < ratbag_profile_get_num_resolutions(profile); i++) {
 		resolution = ratbag_profile_get_resolution(profile, i);
 		if (ratbag_resolution_is_active(resolution))
 			return resolution;
@@ -316,9 +345,11 @@ ratbag_cmd_info(const struct ratbag_cmd *cmd,
 	struct ratbag_device *device;
 	struct ratbag_profile *profile;
 	struct ratbag_button *button;
+	struct ratbag_led *led;
 	char *action;
-	int num_profiles, num_buttons;
-	int i, j, b;
+	int num_profiles, num_buttons, num_leds;
+	int b, l;
+	struct ratbag_color color;
 
 	device = options->device;
 
@@ -337,24 +368,31 @@ ratbag_cmd_info(const struct ratbag_cmd *cmd,
 	if (ratbag_device_has_capability(device,
 					 RATBAG_DEVICE_CAP_BUTTON_MACROS))
 		printf(" btn-macros");
+	if (ratbag_device_has_capability(device,
+					 RATBAG_DEVICE_CAP_LED))
+		printf(" led");
 	printf("\n");
 
 	num_buttons = ratbag_device_get_num_buttons(device);
 	printf("Number of buttons: %d\n", num_buttons);
 
+	num_leds = ratbag_device_get_num_leds(device);
+	printf("Number of leds: %d\n", num_leds);
+
 	num_profiles = ratbag_device_get_num_profiles(device);
 	printf("Profiles supported: %d\n", num_profiles);
 
-	for (i = 0; i < num_profiles; i++) {
+	for (int i = 0; i < num_profiles; i++) {
 		int dpi, rate;
 		profile = ratbag_device_get_profile(device, i);
 		if (!profile)
 			continue;
 
-		printf("  Profile %d%s\n", i,
+		printf("  Profile %d (%s)%s\n", i,
+		       ratbag_profile_is_enabled(profile) ? "enabled" : "disabled",
 		       ratbag_profile_is_active(profile) ? " (active)" : "");
 		printf("    Resolutions:\n");
-		for (j = 0; j < ratbag_profile_get_num_resolutions(profile); j++) {
+		for (unsigned int j = 0; j < ratbag_profile_get_num_resolutions(profile); j++) {
 			struct ratbag_resolution *res;
 
 			res = ratbag_profile_get_resolution(profile, j);
@@ -390,7 +428,22 @@ ratbag_cmd_info(const struct ratbag_cmd *cmd,
 			button = ratbag_button_unref(button);
 		}
 
-		profile = ratbag_profile_unref(profile);
+		for (l = 0; l < num_leds; l++) {
+			led = ratbag_profile_get_led(profile, l);
+			color = ratbag_led_get_color(led);
+
+			printf("    LED: %d type %s mode %s color %02x%02x%02x rate %d brightness: %d\n",
+			       l,
+			       led_type_to_str(ratbag_led_get_type(led)),
+			       led_mode_to_str(ratbag_led_get_mode(led)),
+			       color.red, color.green, color.blue,
+			       ratbag_led_get_effect_rate(led),
+			       ratbag_led_get_brightness(led));
+
+			led = ratbag_led_unref(led);
+		}
+
+		ratbag_profile_unref(profile);
 	}
 
 	return SUCCESS;
@@ -472,7 +525,7 @@ str_to_macro(const char *action_arg, struct macro *m)
 	char *str, *s;
 	enum ratbag_macro_event_type type;
 	int code;
-	int idx = 0;
+	unsigned int idx = 0;
 	int rc = ERR_USAGE;
 
 	/* FIXME: handle per-device maximum lengths of macros */
@@ -560,10 +613,9 @@ ratbag_cmd_change_button(const struct ratbag_cmd *cmd,
 	int button_index;
 	enum ratbag_button_action_type action_type;
 	int rc = ERR_DEVICE;
-	unsigned int btnkey;
+	unsigned int btnkey = 0;
 	enum ratbag_button_action_special special;
 	struct macro macro = {0};
-	int i;
 
 	if (argc != 3)
 		return ERR_USAGE;
@@ -632,7 +684,7 @@ ratbag_cmd_change_button(const struct ratbag_cmd *cmd,
 		break;
 	case RATBAG_BUTTON_ACTION_TYPE_MACRO:
 		m = ratbag_button_macro_new(macro.name);
-		for (i = 0; i < ARRAY_LENGTH(macro.events); i++) {
+		for (size_t i = 0; i < ARRAY_LENGTH(macro.events); i++) {
 			if (macro.events[i].type == RATBAG_MACRO_EVENT_NONE)
 				break;
 
@@ -711,7 +763,7 @@ ratbag_cmd_list_supported_devices(const struct ratbag_cmd *cmd,
 		device = ratbag_cmd_open_device(ratbag, path);
 		if (device) {
 			printf("%s:\t%s\n", path, ratbag_device_get_name(device));
-			device = ratbag_device_unref(device);
+			ratbag_device_unref(device);
 			supported++;
 		}
 		free(input_list[i]);
@@ -1270,13 +1322,12 @@ ratbag_cmd_button_set_macro(const struct ratbag_cmd *cmd,
 	struct ratbag_button_macro *m;
 	struct macro macro = {0};
 	int rc;
-	int i;
 	char macro_str[PATH_MAX] = {0};
 
 	if (argc < 1)
 		return ERR_USAGE;
 
-	for (i = 0; i < argc; i++) {
+	for (int i = 0; i < argc; i++) {
 		strncat(macro_str, argv[i], sizeof(macro_str) - strlen(macro_str) - 1);
 		strcat(macro_str, " ");
 	}
@@ -1293,7 +1344,7 @@ ratbag_cmd_button_set_macro(const struct ratbag_cmd *cmd,
 
 	button = options->button;
 	m = ratbag_button_macro_new(macro.name);
-	for (i = 0; i < ARRAY_LENGTH(macro.events); i++) {
+	for (size_t i = 0; i < ARRAY_LENGTH(macro.events); i++) {
 		if (macro.events[i].type == RATBAG_MACRO_EVENT_NONE)
 			break;
 
@@ -1432,6 +1483,285 @@ static const struct ratbag_cmd cmd_button = {
 };
 
 static int
+ratbag_cmd_led_set_brightness(const struct ratbag_cmd *cmd,
+			      struct ratbag *ratbag,
+			      struct ratbag_cmd_options *options,
+			      int argc, char **argv)
+{
+	struct ratbag_led *led;
+	int brightness;
+	int rc;
+
+	if (argc < 1)
+		return ERR_USAGE;
+
+	led = options->led;
+	brightness = atoi(argv[0]);
+
+	rc = ratbag_led_set_brightness(led, brightness);
+	if (rc != 0)
+		return ERR_DEVICE;
+
+	return SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_led_set_brightness = {
+	.name = "brightness",
+	.cmd = ratbag_cmd_led_set_brightness,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led_set_effect_rate(const struct ratbag_cmd *cmd,
+			struct ratbag *ratbag,
+			struct ratbag_cmd_options *options,
+			int argc, char **argv)
+{
+
+	struct ratbag_led *led;
+	char *str, *endptr;
+	int hz;
+	int rc;
+
+	if (argc < 1)
+		return ERR_USAGE;
+
+	led = options->led;
+	str = argv[0];
+	hz = strtoul(str, &endptr, 10);
+	if (*endptr != '\0')
+		return ERR_USAGE;
+
+	rc = ratbag_led_set_effect_rate(led, hz);
+	if (rc != 0)
+		return ERR_DEVICE;
+
+	return SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_led_set_effect_rate = {
+	.name = "rate",
+	.cmd = ratbag_cmd_led_set_effect_rate,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led_set_color(const struct ratbag_cmd *cmd,
+			 struct ratbag *ratbag,
+			 struct ratbag_cmd_options *options,
+			 int argc, char **argv)
+{
+	struct ratbag_led *led;
+	struct ratbag_color color;
+	int rc;
+	char red[3], green[3], blue[3];
+	char *p;
+
+	if (argc < 1)
+		return ERR_USAGE;
+
+	led = options->led;
+
+	sscanf(argv[0], "%2s%2s%2s", red, green, blue);
+
+	color.red = strtoul(red, &p, 16);
+	color.green = strtoul(green, &p, 16);
+	color.blue = strtoul(blue, &p, 16);
+
+	rc = ratbag_led_set_color(led, color);
+	if (rc != 0)
+		return ERR_DEVICE;
+
+	return SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_led_set_color = {
+	.name = "color",
+	.cmd = ratbag_cmd_led_set_color,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led_set_mode(const struct ratbag_cmd *cmd,
+			struct ratbag *ratbag,
+			struct ratbag_cmd_options *options,
+			int argc, char **argv)
+{
+	struct ratbag_led *led;
+	struct ratbag_color color;
+	enum ratbag_led_mode mode;
+	char *str;
+	int rc;
+
+	if (argc < 1)
+		return ERR_USAGE;
+
+	led = options->led;
+	str = argv[0];
+
+	if (streq(str, "off"))
+		mode = RATBAG_LED_OFF;
+	else if (streq(str, "on"))
+		mode = RATBAG_LED_ON;
+	else if (streq(str, "cycle"))
+		mode = RATBAG_LED_CYCLE;
+	else if (streq(str, "breathing"))
+		mode = RATBAG_LED_BREATHING;
+	else {
+		usage();
+		return ERR_USAGE;
+	}
+
+	/* set default rate and brightness */
+	switch (mode) {
+	case RATBAG_LED_ON:
+		color.red = 255;
+		color.green = 255;
+		color.blue = 255;
+		ratbag_led_set_color(led, color);
+		break;
+	case RATBAG_LED_CYCLE:
+	case RATBAG_LED_BREATHING:
+		ratbag_led_set_effect_rate(led, 20);
+		ratbag_led_set_brightness(led, 100);
+		break;
+	case RATBAG_LED_OFF:
+		break;
+	}
+
+	rc = ratbag_led_set_mode(led, mode);
+	if (rc != 0)
+		return ERR_DEVICE;
+
+	return SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_led_set_mode = {
+	.name = "mode",
+	.cmd = ratbag_cmd_led_set_mode,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led_set(const struct ratbag_cmd *cmd,
+		   struct ratbag *ratbag,
+		   struct ratbag_cmd_options *options,
+		   int argc, char **argv)
+{
+	if (argc < 1)
+		return ERR_USAGE;
+
+	return run_subcommand(argv[0], cmd, ratbag, options,
+			      argc, argv);
+}
+
+static const struct ratbag_cmd cmd_led_set = {
+	.name = "set",
+	.cmd = ratbag_cmd_led_set,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		&cmd_led_set_mode,
+		&cmd_led_set_color,
+		&cmd_led_set_effect_rate,
+		&cmd_led_set_brightness,
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led_get(const struct ratbag_cmd *cmd,
+		   struct ratbag *ratbag,
+		   struct ratbag_cmd_options *options,
+		   int argc, char **argv)
+{
+	struct ratbag_led *led;
+	enum ratbag_led_mode mode;
+	struct ratbag_color color;
+	int hz;
+	int brightness;
+	enum ratbag_led_type type;
+
+	led = options->led;
+
+	type = ratbag_led_get_type(led);
+	mode = ratbag_led_get_mode(led);
+	color = ratbag_led_get_color(led);
+	hz = ratbag_led_get_effect_rate(led);
+	brightness = ratbag_led_get_brightness(led);
+	printf("type: %s, mode: %s, color: %02x%02x%02x, rate: %d, brightness: %d\n",
+	       led_type_to_str(type),
+	       led_mode_to_str(mode),
+	       color.red, color.green, color.blue,
+	       hz, brightness);
+
+	return SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_led_get = {
+	.name = "get",
+	.cmd = ratbag_cmd_led_get,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE | FLAG_NEED_LED,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_led(const struct ratbag_cmd *cmd,
+	       struct ratbag *ratbag,
+	       struct ratbag_cmd_options *options,
+	       int argc, char **argv)
+{
+	struct ratbag_profile *profile;
+	struct ratbag_led *led;
+	int rc, index;
+
+	if (argc < 1)
+		return ERR_USAGE;
+
+	profile = options->profile;
+
+	index = atoi(argv[0]);
+
+	led = ratbag_profile_get_led(profile, index);
+	if (!led) {
+		error("Invalid led %d\n", index);
+		return ERR_UNSUPPORTED;
+	}
+	options->led = led;
+	argc--;
+	argv++;
+
+	rc = run_subcommand(argv[0], cmd, ratbag, options,
+			    argc, argv);
+
+	return rc;
+}
+
+static const struct ratbag_cmd cmd_led = {
+	.name = "led",
+	.cmd = ratbag_cmd_led,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE,
+	.subcommands = {
+		&cmd_led_get,
+		&cmd_led_set,
+		NULL,
+	},
+};
+
+static int
 ratbag_cmd_profile_active_set(const struct ratbag_cmd *cmd,
 			      struct ratbag *ratbag,
 			      struct ratbag_cmd_options *options,
@@ -1563,6 +1893,60 @@ static const struct ratbag_cmd cmd_profile_active = {
 };
 
 static int
+ratbag_cmd_profile_enable(const struct ratbag_cmd *cmd,
+			  struct ratbag *ratbag,
+			  struct ratbag_cmd_options *options,
+			  int argc, char **argv)
+{
+	int rc;
+
+	if (!ratbag_device_has_capability(options->device,
+					  RATBAG_DEVICE_CAP_DISABLE_PROFILE))
+		return ERR_UNSUPPORTED;
+
+	ratbag_profile_set_enabled(options->profile, true);
+	rc = ratbag_device_commit(options->device);
+
+	return rc ? ERR_DEVICE : SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_profile_enable = {
+	.name = "enable",
+	.cmd = ratbag_cmd_profile_enable,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
+ratbag_cmd_profile_disable(const struct ratbag_cmd *cmd,
+			   struct ratbag *ratbag,
+			   struct ratbag_cmd_options *options,
+			   int argc, char **argv)
+{
+	int rc;
+
+	if (!ratbag_device_has_capability(options->device,
+					  RATBAG_DEVICE_CAP_DISABLE_PROFILE))
+		return ERR_UNSUPPORTED;
+
+	ratbag_profile_set_enabled(options->profile, false);
+	rc = ratbag_device_commit(options->device);
+
+	return rc ? ERR_DEVICE : SUCCESS;
+}
+
+static const struct ratbag_cmd cmd_profile_disable = {
+	.name = "disable",
+	.cmd = ratbag_cmd_profile_disable,
+	.flags = FLAG_NEED_DEVICE | FLAG_NEED_PROFILE,
+	.subcommands = {
+		NULL,
+	},
+};
+
+static int
 ratbag_cmd_profile(const struct ratbag_cmd *cmd,
 		   struct ratbag *ratbag,
 		   struct ratbag_cmd_options *options,
@@ -1613,8 +1997,11 @@ static const struct ratbag_cmd cmd_profile = {
 	.flags = FLAG_NEED_DEVICE,
 	.subcommands = {
 		&cmd_profile_active,
+		&cmd_profile_enable,
+		&cmd_profile_disable,
 		&cmd_resolution,
 		&cmd_button,
+		&cmd_led,
 		NULL,
 	},
 };
@@ -1659,8 +2046,10 @@ main(int argc, char **argv)
 		int c;
 		int option_index = 0;
 		static struct option opts[] = {
-			{ "verbose", 2, 0, OPT_VERBOSE },
-			{ "help", 0, 0, OPT_HELP },
+			{ "verbose", optional_argument, 0, OPT_VERBOSE },
+			{ "version", no_argument, 0, OPT_VERSION },
+			{ "help", no_argument, 0, OPT_HELP },
+			{ 0, 0, 0, 0 },
 		};
 
 		c = getopt_long(argc, argv, "+h", opts, &option_index);
@@ -1670,6 +2059,9 @@ main(int argc, char **argv)
 		case 'h':
 		case OPT_HELP:
 			usage();
+			goto out;
+		case OPT_VERSION:
+			version();
 			goto out;
 		case OPT_VERBOSE:
 			if (optarg && streq(optarg, "raw"))
@@ -1701,9 +2093,14 @@ main(int argc, char **argv)
 			    ratbag,
 			    &options,
 			    argc, argv);
+
+	if (options.device)
+		rc = ratbag_device_commit(options.device);
+
 out:
 	ratbag_resolution_unref(options.resolution);
 	ratbag_button_unref(options.button);
+	ratbag_led_unref(options.led);
 	ratbag_profile_unref(options.profile);
 	ratbag_device_unref(options.device);
 	ratbag_unref(ratbag);

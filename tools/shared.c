@@ -49,6 +49,48 @@ udev_device_from_path(struct udev *udev, const char *path)
 }
 
 const char*
+led_type_to_str(enum ratbag_led_type type)
+{
+	const char *str = "UNKNOWN";
+
+	switch(type) {
+	case RATBAG_LED_TYPE_UNKNOWN:
+		str = "unknown";
+		break;
+	case RATBAG_LED_TYPE_LOGO:
+		str = "logo";
+		break;
+	case RATBAG_LED_TYPE_SIDE:
+		str = "side";
+		break;
+	}
+
+	return str;
+}
+
+const char *
+led_mode_to_str(enum ratbag_led_mode mode)
+{
+	const char *str = "UNKNOWN";
+	switch (mode) {
+	case RATBAG_LED_OFF:
+		str = "off";
+		break;
+	case RATBAG_LED_ON:
+		str = "on";
+		break;
+	case RATBAG_LED_CYCLE:
+		str = "cycle";
+		break;
+	case RATBAG_LED_BREATHING:
+		str = "breath";
+		break;
+	}
+
+	return str;
+}
+
+const char*
 button_type_to_str(enum ratbag_button_type type)
 {
 	const char *str = "UNKNOWN";
@@ -87,7 +129,7 @@ button_type_to_str(enum ratbag_button_type type)
 	return str;
 }
 
-const static struct map {
+static const struct map {
 	enum ratbag_button_action_special special;
 	const char *str;
 } special_map[] =  {
@@ -99,9 +141,11 @@ const static struct map {
 	{ RATBAG_BUTTON_ACTION_SPECIAL_WHEEL_RIGHT,		"wheel right" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_WHEEL_UP,		"wheel up" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_WHEEL_DOWN,		"wheel down" },
+	{ RATBAG_BUTTON_ACTION_SPECIAL_RATCHET_MODE_SWITCH,	"ratchet mode switch" },
 
 	/* DPI switch */
 	{ RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_UP,	"resolution cycle up" },
+	{ RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_CYCLE_DOWN,	"resolution cycle down" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_UP,		"resolution up" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_DOWN,		"resolution down" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_RESOLUTION_ALTERNATE,	"resolution alternate" },
@@ -109,6 +153,7 @@ const static struct map {
 
 	/* Profile */
 	{ RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_CYCLE_UP,	"profile cycle up" },
+	{ RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_CYCLE_DOWN,	"profile cycle down" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_UP,		"profile up" },
 	{ RATBAG_BUTTON_ACTION_SPECIAL_PROFILE_DOWN,		"profile down" },
 

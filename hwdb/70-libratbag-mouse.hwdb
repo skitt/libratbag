@@ -95,6 +95,11 @@ mouse:usb:v046dpc249:name:*:
  RATBAG_HIDPP10_DPI=0:5700@23.53
  RATBAG_HIDPP10_PROFILE=G500
 
+# G300
+mouse:usb:v046dpc246:name:*:
+ RATBAG_DRIVER=logitech_g300
+ RATBAG_SVG=logitech-g300.svg
+
 # G500
 mouse:usb:v046dpc068:name:*:
  RATBAG_DRIVER=hidpp10
@@ -165,6 +170,7 @@ mouse:usb:v046dp400a:name:*:
 # G303 over USB
 mouse:usb:v046dpc080:name:*:
  RATBAG_DRIVER=hidpp20
+ RATBAG_SVG=logitech-g303.svg
 
 # Wireless Touchpad (Unifying)
 mouse:usb:v046dp4011:name:*:
@@ -174,9 +180,14 @@ mouse:usb:v046dp4011:name:*:
 mouse:usb:v046dpc537:name:*:
  RATBAG_HIDPP20_INDEX=1
 
+# G900 over USB
+mouse:usb:v046dpc081:name:*:
+ RATBAG_SVG=logitech-g900.svg
+
 # G900 over wireless USB
 mouse:usb:v046dpc539:name:*:
  RATBAG_DRIVER=hidpp20
+ RATBAG_SVG=logitech-g900.svg
  RATBAG_HIDPP20_INDEX=1
 
 
@@ -187,3 +198,12 @@ mouse:usb:v046dpc539:name:*:
 mouse:usb:v1e7dp2e22:name:*:
  RATBAG_DRIVER=roccat
  RATBAG_SVG=roccat-kone-xtd.svg
+
+
+##########################################
+# G.Skill
+##########################################
+
+# MX-780
+mouse:usb:v28dap3101:name:*:
+ RATBAG_DRIVER=gskill

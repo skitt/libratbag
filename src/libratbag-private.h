@@ -21,8 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef LIBRATBAG_PRIVATE_H
-#define LIBRATBAG_PRIVATE_H
+#pragma once
 
 #include <linux/input.h>
 #include <stdint.h>
@@ -95,6 +94,7 @@ struct ratbag_device {
 	struct list profiles;
 
 	unsigned num_buttons;
+	unsigned num_leds;
 
 	void *drv_data;
 
@@ -131,6 +131,18 @@ struct ratbag_driver {
 	void (*remove)(struct ratbag_device *device);
 
 	/**
+	 * Callback called when the driver should write any profiles that
+	 * were modified back to the device.
+	 *
+	 * Both profile and button structs have a dirty variable that can
+	 * be used to tell whether or not they've actually changed since
+	 * the last commit. In order to reduce the amount of time
+	 * committing takes, drivers should use this information to avoid
+	 * writing back profiles and buttons that haven't actually changed.
+	 */
+	int (*commit)(struct ratbag_device *device);
+
+	/**
 	 * Callback called when a read profile is requested by the
 	 * caller of the library.
 	 *
@@ -141,9 +153,10 @@ struct ratbag_driver {
 	 */
 	void (*read_profile)(struct ratbag_profile *profile, unsigned int index);
 
-	/**
-	 * Here, the driver should actually write the profile to the
-	 * device.
+	/*
+	 * FIXME: This function is deprecated and should not be removed. Once
+	 * we've updated all the device drivers to stop using it we'll remove
+	 * it. Look at commit() instead.
 	 */
 	int (*write_profile)(struct ratbag_profile *profile);
 
@@ -168,21 +181,36 @@ struct ratbag_driver {
 	 */
 	void (*read_button)(struct ratbag_button *button);
 
-	/**
-	 * For the given button, store in the profile and in the device
-	 * the given struct ratbag_button.
+	/*
+	 * FIXME: This function is deprecated and should not be removed. Once
+	 * we've updated all the device drivers to stop using it we'll remove
+	 * it. Look at commit() instead.
 	 */
 	int (*write_button)(struct ratbag_button *button,
 			    const struct ratbag_button_action *action);
 
-	/**
-	 * For the given profile, overwrite the current resolution
-	 * of the sensor expressed in DPI, and commit it to the hardware.
-	 *
-	 * Mandatory if the driver exports RATBAG_DEVICE_CAP_SWITCHABLE_RESOLUTION.
+	/*
+	 * FIXME: This function is deprecated and should not be removed. Once
+	 * we've updated all the device drivers to stop using it we'll remove
+	 * it. Look at commit() instead.
 	 */
 	int (*write_resolution_dpi)(struct ratbag_resolution *resolution,
 				    int dpi_x, int dpi_y);
+
+	/**
+	 * For the given led, fill in the struct ratbag_led
+	 * with the available information.
+	 */
+	void (*read_led)(struct ratbag_led *led);
+
+	/*
+	 * FIXME: This function is deprecated and should be removed. Once
+	 * we've updated all the device drivers to stop using it we'll remove
+	 * it. Look at commit() instead.
+	 */
+	int (*write_led)(struct ratbag_led *led, enum ratbag_led_mode mode,
+			 struct ratbag_color color, unsigned int hz,
+			 unsigned int brightness);
 
 	/* private */
 	int (*test_probe)(struct ratbag_device *device, void *data);
@@ -190,7 +218,7 @@ struct ratbag_driver {
 	struct list link;
 };
 
-struct ratbag_resolution{
+struct ratbag_resolution {
 	struct ratbag_profile *profile;
 	int refcount;
 	void *userdata;
@@ -200,6 +228,20 @@ struct ratbag_resolution{
 	bool is_active;
 	bool is_default;
 	uint32_t capabilities;
+};
+
+struct ratbag_led {
+	int refcount;
+	void *userdata;
+	struct list link;
+	struct ratbag_profile *profile;
+	unsigned index;
+	enum ratbag_led_type type;
+	enum ratbag_led_mode mode;
+	struct ratbag_color color;
+	unsigned int hz;              /**< rate of action in hz */
+	unsigned int brightness;      /**< brightness of the LED */
+	bool dirty;
 };
 
 struct ratbag_profile {
@@ -216,8 +258,11 @@ struct ratbag_profile {
 		struct ratbag_resolution *modes;
 		unsigned int num_modes;
 	} resolution;
+	struct list leds;
 
 	bool is_active;		/**< profile is the currently active one */
+	bool is_enabled;
+	bool dirty;       /**< profile changed since last commit */
 };
 
 #define BUTTON_ACTION_NONE \
@@ -277,6 +322,7 @@ struct ratbag_button {
 	enum ratbag_button_type type;
 	struct ratbag_button_action action;
 	uint32_t action_caps;
+	bool dirty; /* changed since last commit to device */
 };
 
 static inline void
@@ -318,7 +364,8 @@ int
 ratbag_device_init_profiles(struct ratbag_device *device,
 			    unsigned int num_profiles,
 			    unsigned int num_resolutions,
-			    unsigned int num_buttons);
+			    unsigned int num_buttons,
+			    unsigned int num_leds);
 
 void
 ratbag_device_set_capability(struct ratbag_device *device,
@@ -417,7 +464,9 @@ log_buffer(struct ratbag *ratbag,
 struct ratbag_driver etekcity_driver;
 struct ratbag_driver hidpp20_driver;
 struct ratbag_driver hidpp10_driver;
+struct ratbag_driver logitech_g300_driver;
 struct ratbag_driver roccat_driver;
+struct ratbag_driver gskill_driver;
 
 struct ratbag_device*
 ratbag_device_new(struct ratbag *ratbag, struct udev_device *udev_device,
@@ -440,6 +489,4 @@ ratbag_register_driver(struct ratbag *ratbag, struct ratbag_driver *driver);
 void
 ratbag_button_copy_macro(struct ratbag_button *button,
 			 const struct ratbag_button_macro *macro);
-
-#endif /* LIBRATBAG_PRIVATE_H */
 

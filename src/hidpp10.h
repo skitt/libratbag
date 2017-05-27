@@ -26,8 +26,7 @@
  *   https://drive.google.com/folderview?id=0BxbRzx7vEV7eWmgwazJ3NUFfQ28&usp=sharing
  */
 
-#ifndef HIDPP_10_H
-#define HIDPP_10_H
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -494,6 +493,7 @@ struct hidpp10_profile {
 	} buttons[PROFILE_NUM_BUTTONS];
 	union hidpp10_macro_data *macros[PROFILE_NUM_BUTTONS];
 	size_t num_buttons;
+	size_t num_leds;
 
 	unsigned int initialized;
 };
@@ -694,5 +694,3 @@ hidpp10_get_firmare_information(struct hidpp10_device *dev,
 				uint8_t *major,
 				uint8_t *minor,
 				uint8_t *build_number);
-
-#endif /* HIDPP_10_H */
