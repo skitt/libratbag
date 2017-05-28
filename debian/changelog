@@ -1,3 +1,10 @@
+libratbag (0.8-1) UNRELEASED; urgency=medium
+
+  * New upstream release, using Meson and obsoleting
+    configure-valgrind.patch.
+
+ -- Stephen Kitt <skitt@debian.org>  Sat, 27 May 2017 21:08:30 +0200
+
 libratbag (0.5-2) unstable; urgency=medium
 
   * Disable valgrind and remove it from the build-dependencies — it's

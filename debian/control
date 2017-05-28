@@ -4,11 +4,11 @@ Section: libs
 Priority: optional
 Build-Depends: check,
                debhelper (>= 9),
-               dh-autoreconf,
                doxygen,
                graphviz,
                libevdev-dev,
                libudev-dev,
+               meson (>= 0.40),
                pkg-config
 Standards-Version: 3.9.8
 Vcs-Browser: https://anonscm.debian.org/cgit/collab-maint/libratbag.git
@@ -42,7 +42,7 @@ Description: Logitech Unifying Receiver access library - dev files
  This package contains the files required to build software using
  liblur.
 
-Package: libratbag3
+Package: libratbag4
 Architecture: linux-any
 Multi-Arch: same
 Depends: ${misc:Depends},
@@ -80,7 +80,7 @@ Package: libratbag-dev
 Architecture: linux-any
 Multi-Arch: same
 Section: libdevel
-Depends: libratbag3 (= ${binary:Version}),
+Depends: libratbag4 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: libratbag-doc
